@@ -297,27 +297,49 @@ button:active {
 .block5 { background: #ffbe7d; }
 .block6 { background: #ffa07d; }
 
-@keyframes botPulse {
-        0% { filter: brightness(1); }
-        50% { filter: brightness(1.8); }
-        100% { filter: brightness(1); }
-}
-
-.bot-controlled {
-        opacity: 0.75;
-        filter: saturate(1.5);
-        outline: 1px solid rgba(0, 255, 255, 0.25);
-        box-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
-        animation: botPulse 1.5s infinite ease-in-out;
-}
-
+/* Previsualización fantasma del bot */
 .bot-ghost {
-        opacity: 0.35;
-        filter: drop-shadow(0 0 3px #00e5ff);
+        opacity: 0.4;
+        position: absolute;
+        pointer-events: none;
+        z-index: 5;
+        border: 1px dashed rgba(255, 255, 255, 0.7);
+}
+
+/* Estilo cuando el bot controla la pieza */
+.bot-controlled {
+        box-shadow: 0 0 10px #00e5ff;
+}
+
+/* Indicador de modo de juego */
+.mode-indicator {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-family: monospace;
+        z-index: 100;
+}
+
+/* Toggle para IA-ASSIST */
+.toggle-btn.active {
+        background-color: #00e5ff;
+        color: black;
+        font-weight: bold;
+}
+
+/* Toggle para Zen Mode */
+.toggle-btn.zen-active {
+        background-color: #ffaa00;
+        color: black;
+        font-weight: bold;
 }
 
 #tetris-keys,
-#mode-indicator,
 .keyboard-guide,
 .footer {
         display: none !important;
