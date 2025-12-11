@@ -487,6 +487,9 @@ function Tetris()
                 var requestedZen = !!(modeState && modeState.zen);
                 var botIsReady = !!(window.bot && window.bot.enabled === true);
 
+                // Guardar el estado previo para evitar carreras al desmontar IA-ASSIST.
+                var wasIAAssist = self.isIAAssist;
+
                 console.info('[SWAP] Aplicando reglas de modo', {
                         coop: requestedCoop,
                         ia: requestedIA,
@@ -583,7 +586,7 @@ function Tetris()
                                         window.bot.clearGhostPreview();
                                 }
                         } else {
-                                if (self.botPuzzle) {
+                                if (self.botPuzzle && !wasIAAssist) {
                                         self.botPuzzle.destroy();
                                         self.botPuzzle = null;
                                 }
