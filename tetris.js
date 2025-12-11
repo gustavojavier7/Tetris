@@ -359,7 +359,8 @@ function Tetris()
         {
                 if (!actor || !actor.elements || typeof actor.elements.forEach !== 'function') { return; }
 
-                var shouldMarkBot = !actor.isHumanControlled;
+                // Solo marcar como bot si NO es humano Y NO estamos en modo IA-ASSIST (donde el bot es el protagonista)
+                var shouldMarkBot = !actor.isHumanControlled && !self.isIAAssist;
                 var toggleVisual = function(el) {
                         if (!el || !el.classList) { return; }
                         if (shouldMarkBot) {
