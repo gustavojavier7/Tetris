@@ -659,6 +659,7 @@ function Tetris()
                 self.isIAAssist = true;
                 self.botPuzzle.isHumanControlled = false;
                 self.botPuzzle.stopped = false;
+                if (typeof self.botPuzzle.suspendGravity === 'function') { self.botPuzzle.suspendGravity(); }
                 // Desactivar gravedad temporalmente para que el bot anime la jugada sin interferencias
                 if (self.botPuzzle.fallDownID) {
                         clearTimeout(self.botPuzzle.fallDownID);
@@ -710,6 +711,10 @@ function Tetris()
                 self.humanPuzzle = self.botPuzzle;
                 self.botPuzzle = null;
                 self.isIAAssist = false;
+
+                if (self.humanPuzzle && typeof self.humanPuzzle.resumeGravity === 'function') {
+                        self.humanPuzzle.resumeGravity(true);
+                }
 
                 if (window.bot) {
                         if (!self.isCoopMode) {
@@ -1555,9 +1560,13 @@ function Tetris()
                 // timeout ids
                 this.fallDownID = null;
                 this.forceMoveDownID = null;
+                this.forceMoveDownDelay = 30;
 
                 // Bandera de consolidación inmediata para evitar piezas flotantes al cambiar de modo.
                 this.locked = false;
+
+                // Suspensión de gravedad para piezas bajo control del bot.
+                this.gravitySuspended = !this.isHumanControlled;
 
                 // Indicador para habilitar la planificación del bot solo cuando el humano haya actuado.
                 this.botReadyTriggered = false;
@@ -1628,6 +1637,33 @@ function Tetris()
                 };
 
                 /**
+                 * Pausa la gravedad de la pieza y limpia cualquier timer activo.
+                 * @return void
+                 * @access public
+                 */
+                this.suspendGravity = function()
+                {
+                        this.gravitySuspended = true;
+                        if (this.fallDownID) { clearTimeout(this.fallDownID); this.fallDownID = null; }
+                };
+
+                /**
+                 * Reanuda la gravedad cuando la pieza vuelve a control humano.
+                 * @param bool restartTimer
+                 * @return void
+                 * @access public
+                 */
+                this.resumeGravity = function(restartTimer)
+                {
+                        this.gravitySuspended = false;
+
+                        if (restartTimer && this.isRunning() && !this.isStopped()) {
+                                if (this.fallDownID) { clearTimeout(this.fallDownID); }
+                                this.fallDownID = setTimeout(this.fallDown, this.speed);
+                        }
+                };
+
+                /**
                  * Elimina la representación visual actual (pieza activa) del DOM.
                  * @return void
                  * @access private
@@ -1669,6 +1705,8 @@ function Tetris()
                 {
                         this.clearTimers();
                         this.locked = false;
+                        this.gravitySuspended = !this.isHumanControlled;
+                        this.forceMoveDownDelay = 30;
 
                         var humanNextType = (this.tetris && this.tetris.humanPuzzle) ? this.tetris.humanPuzzle.nextType : null;
                         // Permite forzar la semilla de la pieza para sincronizar con el bot.
@@ -1825,7 +1863,7 @@ function Tetris()
                         }
                         this.running = true;
                         // En modo cooperativo, la pieza del bot debe permanecer inerte hasta que se ejecute su jugada forzada.
-                        var shouldAutoFall = this.isHumanControlled || !this.tetris.isCoopMode;
+                        var shouldAutoFall = !this.gravitySuspended && (this.isHumanControlled || !this.tetris.isCoopMode);
                         this.fallDownID = shouldAutoFall ? setTimeout(this.fallDown, this.speed) : null;
                         // Sincronizar creación de la siguiente pieza del bot y forzar su spawn inicial.
                         if (this.isHumanControlled && this.tetris.botPuzzle && !this.tetris.botPuzzle.isRunning()) {
@@ -1947,6 +1985,7 @@ function Tetris()
 		 */
                 this.fallDown = function()
                 {
+                        if (self.gravitySuspended) { return; }
                         if (!self.isHumanControlled && self.tetris.isCoopMode && !self.tetris.isIAAssist) { return; }
 
                         if (self.isRunning()) {
@@ -2007,7 +2046,8 @@ function Tetris()
                                         self.tetris.stats.setScore(self.tetris.stats.getScore() + 5 + self.tetris.stats.getLevel());
                                         self.tetris.stats.setActions(self.tetris.stats.getActions() + 1);
                                         self.moveDown();
-                                        self.forceMoveDownID = setTimeout(self.forceMoveDown, 30);
+                                        var dropDelay = (typeof self.forceMoveDownDelay === 'number') ? self.forceMoveDownDelay : 30;
+                                        self.forceMoveDownID = setTimeout(self.forceMoveDown, dropDelay);
                                 } else {
                                         // move blocks into area board
                                         self.locked = true;
@@ -2769,21 +2809,28 @@ this.executeMoveSmoothly = function(move) {
         var actor = self.tetris.botPuzzle || self.tetris.humanPuzzle;
         if (!actor) { return; }
 
+        if (typeof actor.suspendGravity === 'function') { actor.suspendGravity(); }
+
+        var simulation = self.simulateDrop(move.rotation, move.x);
+        if (!simulation.isValid) {
+                self.isThinking = false;
+                return;
+        }
+
         // 1. Planificar rotaciones
         for (var i = 0; i < move.rotation; i++) { actions.push('up'); }
 
         // 2. Planificar movimiento lateral
         var currentX = actor.getX();
-        var targetX = move.x;
+        var targetX = (typeof simulation.finalX === 'number') ? simulation.finalX : move.x;
         var dx = targetX - currentX;
         var dir = dx > 0 ? 'right' : 'left';
 
         for (var j = 0; j < Math.abs(dx); j++) { actions.push(dir); }
 
-        // 3. Planificar caída final
-        actions.push('space');
+        var targetY = simulation.finalY;
 
-        // 4. Ejecutar secuencia con retardo
+        // 3. Ejecutar secuencia con retardo y caída visual
         var k = 0;
         function playStep() {
                 if (!self.enabled || !actor || actor.isStopped()) {
@@ -2796,16 +2843,36 @@ this.executeMoveSmoothly = function(move) {
 
                         console.log("[BOT][ACTION]", action, "currentX=", actor.getX());
 
-                        if (action === 'up') { self.tetris.up(actor); }
-                        else if (action === 'left') { self.tetris.left(actor); }
-                        else if (action === 'right') { self.tetris.right(actor); }
-                        else if (action === 'space') { self.tetris.space(actor); }
+                        if (action === 'up' && actor.mayRotate()) { actor.rotate(); }
+                        else if (action === 'left' && actor.mayMoveLeft()) { actor.moveLeft(); }
+                        else if (action === 'right' && actor.mayMoveRight()) { actor.moveRight(); }
 
                         setTimeout(playStep, 50);
-                } else {
-                        self.isThinking = false;
+                        return;
                 }
+
+                animateDrop();
         }
+
+        function animateDrop() {
+                if (!self.enabled || !actor || actor.isStopped()) {
+                        self.isThinking = false;
+                        return;
+                }
+
+                var atTargetY = (typeof targetY === 'number') && actor.getY() >= targetY;
+                if (!atTargetY && actor.mayMoveDown()) {
+                        actor.moveDown();
+                        setTimeout(animateDrop, 50);
+                        return;
+                }
+
+                actor.stop();
+                actor.forceMoveDownDelay = 50;
+                actor.forceMoveDown();
+                self.isThinking = false;
+        }
+
         playStep();
                         };
 
