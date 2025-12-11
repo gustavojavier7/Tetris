@@ -518,7 +518,6 @@ function Tetris()
 			this.y = null;
 		};
 
-                this.nextType = random(this.puzzles.length);
                 this.reset(); // reset() ya establece nextType internamente
 
 		this.isRunning = function() { return this.running; };
@@ -2493,63 +2492,43 @@ if (typeof window !== "undefined") {
 }
 
 
-// --- INICIALIZACIÓN DEL JUEGO ---
+// --- INICIALIZACIÓN FALTANTE ---
 document.addEventListener('DOMContentLoaded', function() {
-	// Crear instancia del juego
-	var tetris = new Tetris();
-	window.tetris = tetris; // Hacerla accesible globalmente para depuración
+        // 1. Crear instancia del juego
+        var tetris = new Tetris();
+        window.tetris = tetris; // Para depuración
 
-	// Inicializar el bot DESPUÉS de crear Tetris
-	window.bot = new TetrisBot(tetris);
+        // 2. Crear instancia del bot y asignarla a window.bot (¡CRÍTICO!)
+        window.bot = new TetrisBot(tetris);
 
-	// Actualizar la UI para reflejar el estado inicial del bot
-	if (typeof tetris.updateBotToggleLabel === 'function') {
-		tetris.updateBotToggleLabel();
-	}
+        // 3. Configurar controles de UI (si existen)
+        var iaToggle = document.getElementById('iaAssistToggle');
+        var zenToggle = document.getElementById('zenToggle');
 
-	// Configurar controles de teclado
-	var keyboard = new Keyboard();
-	keyboard.set(keyboard.n, function() { tetris.start(); });
-	keyboard.set(keyboard.p, function() { tetris.pause(); });
-	keyboard.set(keyboard.r, function() { tetris.reset(); });
-	keyboard.set(keyboard.left, function() { tetris.left(); });
-	keyboard.set(keyboard.right, function() { tetris.right(); });
-	keyboard.set(keyboard.up, function() { tetris.up(); });
-	keyboard.set(keyboard.down, function() { tetris.down(); });
-	keyboard.set(keyboard.space, function() { tetris.space(); });
+        if (iaToggle) {
+            iaToggle.addEventListener('click', function() {
+                var currentIA = tetris.isIAAssist;
+                tetris.updateGameMode({ 
+                    ia: !currentIA, 
+                    zen: tetris.zenMode 
+                });
+            });
+        }
 
-	// Delegación de eventos para controles de UI
-	document.addEventListener('keydown', keyboard.event);
+        if (zenToggle) {
+            zenToggle.addEventListener('click', function() {
+                var currentZen = tetris.zenMode;
+                tetris.updateGameMode({ 
+                    ia: tetris.isIAAssist, 
+                    zen: !currentZen 
+                });
+            });
+        }
 
-	// Configurar event listeners de la interfaz
-	var iaToggle = document.getElementById('iaAssistToggle');
-	var zenToggle = document.getElementById('zenToggle');
+        // 4. Inicializar escalado responsivo
+        setTimeout(function() {
+            tetris.updateResponsiveUnit();
+        }, 100);
 
-	if (iaToggle) {
-		iaToggle.addEventListener('click', function() {
-			var iaActual = tetris.isIAAssist;
-			tetris.updateGameMode({ ia: !iaActual, zen: tetris.zenMode });
-		});
-	}
-
-	if (zenToggle) {
-		zenToggle.addEventListener('click', function() {
-			var zenActual = tetris.zenMode;
-			tetris.updateGameMode({ ia: tetris.isIAAssist, zen: !zenActual });
-		});
-	}
-
-	// Escalado responsivo
-	window.addEventListener('resize', function() {
-		if (tetris && typeof tetris.updateResponsiveUnit === 'function') {
-			tetris.updateResponsiveUnit();
-		}
-	});
-
-	// Configuración responsiva inicial
-	setTimeout(function() {
-		tetris.updateResponsiveUnit();
-	}, 100);
-
-	console.log('[INIT] Tetris inicializado con soporte IA-ASSIST');
+        console.log('[INIT] Tetris con IA-ASSIST inicializado');
 });
