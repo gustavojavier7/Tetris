@@ -1877,6 +1877,8 @@ function Tetris()
 
                         // next puzzle (solo humano para mantener la UI limpia)
                         if (this.isHumanControlled) {
+                                this.clearNextPreview();
+
                                 var nextPuzzle = this.puzzles[this.nextType];
                                 for (var y = 0; y < nextPuzzle.length; y++) {
                                         for (var x = 0; x < nextPuzzle[y].length; x++) {
@@ -1895,6 +1897,19 @@ function Tetris()
                         this.tetris.updateControlStyles(this);
 
                         // Activar el bot para la nueva pieza cuando corresponda
+                        if (this.tetris && this.tetris.isIAAssist && window.bot && window.bot.enabled) {
+                                var botActor = this.tetris.botPuzzle || this;
+
+                                if (typeof botActor.suspendGravity === "function") {
+                                        botActor.suspendGravity();
+                                }
+
+                                window.bot.currentPuzzle = botActor;
+                                window.bot.isThinking = false;
+                                window.bot.bestBotMove = null;
+                                window.bot.predictedBoard = null;
+                                window.bot.makeMove();
+                        }
                 };
 
                 /**
