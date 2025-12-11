@@ -186,39 +186,85 @@ function Tetris()
 		self.updateModeStatus();
 	};
 
-	this.enableIAAssist = function() {
-		if (!self.puzzle || self.puzzle.isStopped()) return;
-		if (!window.bot || !window.bot.enabled) {
-			console.warn('[IA] Bot no disponible');
-			return;
+        this.enableIAAssist = function() {
+                if (!self.puzzle || self.puzzle.isStopped()) return;
+                if (!window.bot || !window.bot.enabled) {
+                        console.warn('[IA] Bot no disponible');
+                        return;
 		}
 
-		console.log("[IA] Tomando control.");
-		self.puzzle.isHumanControlled = false; // Transferencia de propiedad
-		self.puzzle.fallDownID = null; // Apagar gravedad humana
+                console.log("[IA] Tomando control.");
+                self.puzzle.isHumanControlled = false; // Transferencia de propiedad
+                self.puzzle.fallDownID = null; // Apagar gravedad humana
 
-		// Activar ciclo del bot
-		window.bot.currentPuzzle = self.puzzle;
-		window.bot.isThinking = false;
-		
-		// Iniciar movimiento inmediatamente
-		window.bot.makeMove(); 
-		window.bot.executeStoredMove();
-		
-		self.updateControlStyles(self.puzzle);
-	};
+                // Activar ciclo del bot
+                window.bot.currentPuzzle = self.puzzle;
+                window.bot.isThinking = false;
 
-	this.disableIAAssist = function() {
-		if (!self.puzzle) return;
-		
-		console.log("[IA] Devolviendo control.");
-		self.puzzle.isHumanControlled = true;
-		
-		// Reactivar gravedad
-		self.puzzle.resumeGravity(true);
-		
-		self.updateControlStyles(self.puzzle);
-	};
+                // Iniciar movimiento inmediatamente
+                window.bot.makeMove();
+                window.bot.executeStoredMove();
+
+                self.updateControlStyles(self.puzzle);
+
+                if (window.bot) {
+                        window.bot.enabled = true;
+                        window.bot.currentPuzzle = self.puzzle;
+                        window.bot.isThinking = false;
+
+                        // Arranque inicial
+                        if (typeof window.bot.makeMove === 'function') {
+                                window.bot.makeMove();
+                        }
+                        
+                        setTimeout(function () {
+                                if (window.bot.bestBotMove) {
+                                        window.bot.executeStoredMove();
+                                }
+                        }, 100);
+
+                        // [NUEVO] WATCHDOG: Asegurar que el bot no se duerma
+                        if (window.bot.assistInterval) clearInterval(window.bot.assistInterval);
+                        
+                        window.bot.assistInterval = setInterval(function() {
+                                // Solo intervenir si estamos en IA-ASSIST, el juego corre, y el bot no está haciendo nada
+                                if (self.isIAAssist && self.puzzle && self.puzzle.isRunning() && !self.paused) {
+                                        if (!window.bot.isThinking && !window.bot.bestBotMove && !self.puzzle.isHumanControlled) {
+                                                console.log("[WATCHDOG] Reactivando bot dormido...");
+                                                window.bot.makeMove();
+                                                setTimeout(function() {
+                                                        if (window.bot.bestBotMove) window.bot.executeStoredMove();
+                                                }, 50);
+                                        }
+                                }
+                        }, 1000); // Revisar cada segundo
+                }
+        };
+
+        this.disableIAAssist = function() {
+                if (!self.puzzle) return;
+
+                console.log("[IA] Devolviendo control.");
+                self.puzzle.isHumanControlled = true;
+
+                // Reactivar gravedad
+                self.puzzle.resumeGravity(true);
+
+                self.updateControlStyles(self.puzzle);
+
+                if (window.bot) {
+                        // [NUEVO] Limpiar el watchdog
+                        if (window.bot.assistInterval) {
+                                clearInterval(window.bot.assistInterval);
+                                window.bot.assistInterval = null;
+                        }
+                        
+                        if (!self.isCoopMode) {
+                                window.bot.enabled = false;
+                        }
+                        // ...
+                }
+        };
 
 	this.updateControlStyles = function(actor) {
 		if (!actor || !actor.elements) return;
@@ -555,16 +601,35 @@ function Tetris()
 
 			this.tetris.updateControlStyles(this);
 
-			// --- DISPARADOR DEL BOT ---
-			// Si el bot está activo (IA-ASSIST), ejecutar ciclo.
-			if (window.bot && window.bot.enabled && !this.isHumanControlled) {
-				window.bot.currentPuzzle = this;
-				window.bot.isThinking = false;
-				console.log("[IA] Pieza colocada. Pensando...");
-				window.bot.makeMove();
-				window.bot.executeStoredMove();
-			}
-		};
+                        // --- BLOQUE BOT REPARADO ---
+                        // Solo activar si el bot está encendido y la pieza NO es humana
+                        if (window.bot && window.bot.enabled && !this.isHumanControlled) {
+                                
+                                // 1. Asegurar referencia y estado
+                                window.bot.currentPuzzle = this;
+                                window.bot.isThinking = false;
+                                window.bot.bestBotMove = null; 
+
+                                // 2. Usar Timeout para desacoplar el renderizado del cálculo (Evita race conditions)
+                                setTimeout(function() {
+                                        console.log("[IA] Ciclo iniciado en place()...");
+                                        
+                                        // PENSAR
+                                        window.bot.makeMove();
+
+                                        // ACTUAR (Dar tiempo al cerebro para poblar bestBotMove)
+                                        setTimeout(function() {
+                                                if (window.bot.bestBotMove) {
+                                                        window.bot.executeStoredMove();
+                                                } else {
+                                                        console.warn("[IA] No se encontró jugada, reintentando...");
+                                                        // Fallback de emergencia por si el cálculo falló
+                                                        window.bot.makeMove(); 
+                                                }
+                                        }, 100); // 100ms de "tiempo de reacción"
+                                }, 50);
+                        }
+                };
 
 		this.destroy = function() {
 			this.clearTimers();
@@ -2280,30 +2345,25 @@ function buildPredictedBoard() {
                 return null;
         }
 
-        if (!self.tetris.puzzle.isStopped()) {
-                return cloneAreaGrid(self.tetris.area.board);
+        // [CORREGIDO] Si la pieza está activa (NO detenida), debemos fusionarla en la proyección.
+        if (self.tetris.puzzle && !self.tetris.puzzle.isStopped()) {
+                var baseGrid = cloneAreaGrid(self.tetris.area.board);
+                var currentPiece = clonePieceGrid(self.tetris.puzzle.board);
+                var posX = self.tetris.puzzle.getX();
+                var posY = self.tetris.puzzle.getY();
+
+                // Validar posición inicial antes de proyectar
+                if (isPositionValid(currentPiece, posX, posY, baseGrid)) {
+                        // Simular caída (Hard Drop) de la pieza actual
+                        while (isPositionValid(currentPiece, posX, posY + 1, baseGrid)) {
+                                posY++;
+                        }
+                        return mergePiece(baseGrid, currentPiece, posX, posY);
+                }
         }
 
-        var baseGrid = cloneAreaGrid(self.tetris.area.board);
-        var humanPiece = clonePieceGrid(self.tetris.puzzle.board);
-
-        if (!humanPiece.length) {
-                return baseGrid;
-        }
-
-        var posX = self.tetris.puzzle.getX();
-        var posY = self.tetris.puzzle.getY();
-
-        // Fast-fail: si la posición actual ya es inválida, devolvemos solo el tablero base.
-        if (!isPositionValid(humanPiece, posX, posY, baseGrid)) {
-                return baseGrid;
-        }
-
-        while (isPositionValid(humanPiece, posX, posY + 1, baseGrid)) {
-                posY++;
-        }
-
-        return mergePiece(baseGrid, humanPiece, posX, posY);
+        // Si la pieza está detenida o no existe, devolvemos el tablero tal cual.
+        return cloneAreaGrid(self.tetris.area.board);
 }
 
 	function cloneAreaGrid(board) {
