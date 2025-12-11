@@ -552,11 +552,10 @@ function Tetris()
                 if (!isGameRunning) {
                         self.updateResponsiveUnit();
                 } else {
-                        // LÓGICA SIMPLIFICADA: Ya no existe el "if (self.isCoopMode)"
-                        // Solo gestionamos la limpieza de la pieza del bot si NO estamos en IA-ASSIST.
-                        
-                        // Si NO estamos en modo IA (ni venimos de él), y existe una pieza bot residual, destruirla.
-                        if (self.botPuzzle && !wasIAAssist && !self.isIAAssist) {
+                        // LÓGICA SIMPLIFICADA PARA UN SOLO MODO (IA-ASSIST)
+    
+                        // Si no estamos en IA-ASSIST (y no venimos de él), aseguramos que no haya residuos.
+                        if (!self.isIAAssist && !wasIAAssist && self.botPuzzle) {
                                 self.botPuzzle.destroy();
                                 self.botPuzzle = null;
                         }
@@ -564,7 +563,7 @@ function Tetris()
                         if (window.bot) {
                                 window.bot.bestBotMove = null;
                                 window.bot.predictedBoard = null;
-                                // Limpiar fantasma si no es IA quien controla
+                                // Limpieza de visualización
                                 if (!self.isIAAssist && typeof window.bot.clearGhostPreview === 'function') {
                                         window.bot.clearGhostPreview();
                                 }
@@ -745,7 +744,7 @@ function Tetris()
                 document.getElementById("tetris-keys").style.display = "none";
                 self.area = new Area(self.unit, self.areaX, self.areaY, "tetris-area");
                 self.humanPuzzle = new Puzzle(self, self.area, true);
-                self.botPuzzle = null; // En modo 'Solo' o 'IA-Assist', iniciamos sin pieza secundaria.
+                self.botPuzzle = null; // En IA-ASSIST puro, la pieza del bot no existe al inicio.
                 if (self.humanPuzzle.mayPlace()) {
                         self.humanPuzzle.place();
                 } else {
