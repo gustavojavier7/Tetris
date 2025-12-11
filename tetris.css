@@ -339,6 +339,87 @@ button:active {
         font-weight: bold;
 }
 
+/* 🔘 ESTILOS PARA BOTONES ACTIVOS/INACTIVOS */
+.switch.active {
+        background-color: #00e5ff !important;
+        border-color: #00e5ff !important;
+        box-shadow: 0 0 10px rgba(0, 229, 255, 0.7);
+}
+
+#iaAssistToggle.active::after {
+        content: "ON";
+        color: black;
+        font-weight: bold;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 10px;
+}
+
+#zenToggle.active::after {
+        content: "ON";
+        color: black;
+        font-weight: bold;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 10px;
+}
+
+/* 🎮 ESTADO DEL JUEGO */
+.game-message.idle {
+        color: #aaa;
+        opacity: 0.8;
+}
+
+.game-message.active {
+        color: #00e5ff;
+        opacity: 1;
+        animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+        0% { opacity: 0.8; }
+        50% { opacity: 1; }
+        100% { opacity: 0.8; }
+}
+
+/* 👻 PREVIEW DEL BOT */
+.bot-ghost {
+        opacity: 0.3;
+        position: absolute;
+        pointer-events: none;
+        z-index: 5;
+        border: 1px dashed rgba(255, 255, 255, 0.5);
+}
+
+/* 📊 INDICADOR DE MODO */
+#mode-status {
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 14px;
+        margin-top: 10px;
+        text-align: center;
+        border: 2px solid #444;
+        font-family: 'Courier New', monospace;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+}
+
+/* 🎯 BOTONES INTERACTIVOS */
+.btn-primary:hover, .btn-secondary:hover {
+        transform: translateY(-2px);
+        transition: transform 0.2s ease;
+}
+
+.btn-primary:active, .btn-secondary:active {
+        transform: translateY(0);
+}
+
 #tetris-keys,
 .keyboard-guide,
 .footer {
