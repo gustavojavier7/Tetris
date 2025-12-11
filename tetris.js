@@ -402,10 +402,30 @@ function Tetris()
 	};
 
 	this.left = function() {
-		if (self.inputLocked || !self.puzzle || !self.puzzle.isHumanControlled) return;
+		// [DEBUG] 3. Intento de movimiento lógico
+		console.log("[CONTROL] Comando LEFT solicitado.");
+		console.log("[CONTROL] Estado:", {
+			inputLocked: self.inputLocked,
+			puzzleExists: !!self.puzzle,
+			isHumanControlled: self.puzzle ? self.puzzle.isHumanControlled : "N/A",
+			isRunning: self.puzzle ? self.puzzle.isRunning() : "N/A",
+			isStopped: self.puzzle ? self.puzzle.isStopped() : "N/A"
+		});
+
+		if (self.inputLocked || !self.puzzle || !self.puzzle.isHumanControlled) {
+			console.warn("[CONTROL] Movimiento RECHAZADO por guardias.");
+			return;
+		}
+		if (!self.puzzle.isRunning() || self.puzzle.isStopped()) {
+			console.warn("[CONTROL] Movimiento RECHAZADO: pieza detenida.");
+			return;
+		}
+
+		console.log("[CONTROL] Movimiento ACEPTADO. Ejecutando...");
 		if (self.puzzle.mayMoveLeft()) {
 			self.puzzle.moveLeft();
 			self.stats.setActions(self.stats.getActions() + 1);
+			self.puzzle.notifyBotAfterHumanMove(); // Hint mode (opcional)
 		}
 	};
 
@@ -922,32 +942,43 @@ function Window(id)
 		this.event = function(e)
 		{
 			var event = e || window.event;
+			var keyInfo = event.code || event.key || event.keyCode;
 
-                        // Fast-fail: si un elemento interactivo tiene el foco, no procesar atajos de juego.
-                        if (isUIFocused(event)) {
-                                if (typeof event.stopImmediatePropagation === "function") {
-                                        event.stopImmediatePropagation();
-                                }
-                                event.preventDefault();
-                                return;
-                        }
+			// [DEBUG] 1. Entrada Cruda
+			console.log("--------------------------------------------------");
+			console.log("[KEYBOARD] Tecla detectada:", keyInfo);
 
-                        var keyName = event && typeof event.key === "string" ? event.key : "";
-                        var keyCode = event && typeof event.keyCode === "number" ? event.keyCode : KEY_NAME_TO_CODE[keyName];
+			// Fast-fail: si un elemento interactivo tiene el foco, no procesar atajos de juego.
+			if (isUIFocused(event)) {
+				console.log("[KEYBOARD] Bloqueado por UI Focus"); // [DEBUG]
+				if (typeof event.stopImmediatePropagation === "function") {
+					event.stopImmediatePropagation();
+				}
+				event.preventDefault();
+				return;
+			}
 
-                        if ((ALLOWED_GAME_KEYS.has(keyName) || LEGACY_GAME_KEYS.has(keyCode)) && event) {
-                                event.preventDefault();
-                                if (typeof event.stopImmediatePropagation === "function") {
-                                        event.stopImmediatePropagation();
+			// [DEBUG] 2. Pasó filtro UI
+			console.log("[KEYBOARD] Pasó filtro UI. Buscando mapeo...");
+
+			var keyName = event && typeof event.key === "string" ? event.key : "";
+			var keyCode = event && typeof event.keyCode === "number" ? event.keyCode : KEY_NAME_TO_CODE[keyName];
+
+			if ((ALLOWED_GAME_KEYS.has(keyName) || LEGACY_GAME_KEYS.has(keyCode)) && event) {
+				event.preventDefault();
+				if (typeof event.stopImmediatePropagation === "function") {
+					event.stopImmediatePropagation();
 				}
 			}
 
 			for (var i = 0; i < self.keys.length; i++) {
 				if (keyCode == self.keys[i]) {
+					console.log("[KEYBOARD] ¡Mapeo encontrado! Ejecutando función para:", keyCode); // [DEBUG]
 					self.funcs[i]();
 					break;
 				}
 			}
+			// Si llega aquí y no hay log de "Mapeo encontrado", la tecla no está registrada en self.set()
 		};
 	}
 
