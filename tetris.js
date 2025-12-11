@@ -201,9 +201,9 @@ function Tetris()
                 window.bot.currentPuzzle = self.puzzle;
                 window.bot.isThinking = false;
 
-                // Iniciar movimiento inmediatamente
+                // Iniciar movimiento inmediatamente con un pequeño retraso antes de ejecutar
                 window.bot.makeMove();
-                window.bot.executeStoredMove();
+                setTimeout(function() { window.bot.executeStoredMove(); }, 50);
 
                 self.updateControlStyles(self.puzzle);
 
@@ -212,32 +212,18 @@ function Tetris()
                         window.bot.currentPuzzle = self.puzzle;
                         window.bot.isThinking = false;
 
-                        // Arranque inicial
-                        if (typeof window.bot.makeMove === 'function') {
-                                window.bot.makeMove();
-                        }
-                        
-                        setTimeout(function () {
-                                if (window.bot.bestBotMove) {
-                                        window.bot.executeStoredMove();
-                                }
-                        }, 100);
-
-                        // [NUEVO] WATCHDOG: Asegurar que el bot no se duerma
+                        // WATCHDOG: Asegurar que el bot no se duerma
                         if (window.bot.assistInterval) clearInterval(window.bot.assistInterval);
-                        
+
                         window.bot.assistInterval = setInterval(function() {
-                                // Solo intervenir si estamos en IA-ASSIST, el juego corre, y el bot no está haciendo nada
                                 if (self.isIAAssist && self.puzzle && self.puzzle.isRunning() && !self.paused) {
                                         if (!window.bot.isThinking && !window.bot.bestBotMove && !self.puzzle.isHumanControlled) {
-                                                console.log("[WATCHDOG] Reactivando bot dormido...");
+                                                console.warn("[WATCHDOG] Bot inactivo detectado. Reactivando...");
                                                 window.bot.makeMove();
-                                                setTimeout(function() {
-                                                        if (window.bot.bestBotMove) window.bot.executeStoredMove();
-                                                }, 50);
+                                                window.bot.executeStoredMove();
                                         }
                                 }
-                        }, 1000); // Revisar cada segundo
+                        }, 1500); // Revisar cada 1.5 segundos
                 }
         };
 
