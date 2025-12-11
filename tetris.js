@@ -546,67 +546,32 @@ function Tetris()
                 syncPanelToggle('iaAssistToggle', self.isIAAssist);
                 syncPanelToggle('zenToggle', self.zenMode);
 
-                var isGameRunning =
-                        (self.humanPuzzle && self.humanPuzzle.isRunning && self.humanPuzzle.isRunning()) ||
-                        (self.botPuzzle && self.botPuzzle.isRunning && self.botPuzzle.isRunning());
+                var isGameRunning = (self.humanPuzzle && self.humanPuzzle.isRunning()) || 
+                                    (self.botPuzzle && self.botPuzzle.isRunning());
 
                 if (!isGameRunning) {
-                        if (self.area && wasCoop !== requestedCoop) {
-                                self.reset();
-                        }
                         self.updateResponsiveUnit();
                 } else {
-                        if (self.isCoopMode) {
-                                if (self.botPuzzle) {
-                                        self.botPuzzle.clearTimers();
-                                }
-                                if (self.humanPuzzle && typeof self.humanPuzzle.lockNow === 'function' && !self.humanPuzzle.locked) {
-                                        self.humanPuzzle.lockNow();
-                                }
-
-                                if (!self.botPuzzle) {
-                                        self.botPuzzle = new Puzzle(self, self.area, false);
-                                }
-
-                                if (self.humanPuzzle && self.botPuzzle) {
-                                        var nextType = (typeof self.humanPuzzle.nextType === 'number') ? self.humanPuzzle.nextType : random(self.humanPuzzle.puzzles.length);
-                                        self.botPuzzle.type = self.humanPuzzle.type;
-                                        self.botPuzzle.nextType = nextType;
-
-                                        if (self.humanPuzzle.history) {
-                                                self.botPuzzle.history = self.humanPuzzle.history.slice();
-                                        }
-                                }
-
-                                if (self.botPuzzle && !self.botPuzzle.isRunning()) {
-                                        self.botPuzzle.place();
-                                }
-
-                                if (window.bot && typeof window.bot.clearGhostPreview === 'function') {
-                                        window.bot.clearGhostPreview();
-                                }
-                        } else {
-                                if (self.botPuzzle && !wasIAAssist) {
-                                        self.botPuzzle.destroy();
-                                        self.botPuzzle = null;
-                                }
-
-                                if (window.bot && typeof window.bot.clearGhostPreview === 'function') {
-                                        window.bot.clearGhostPreview();
-                                }
+                        // LÓGICA SIMPLIFICADA: Ya no existe el "if (self.isCoopMode)"
+                        // Solo gestionamos la limpieza de la pieza del bot si NO estamos en IA-ASSIST.
+                        
+                        // Si NO estamos en modo IA (ni venimos de él), y existe una pieza bot residual, destruirla.
+                        if (self.botPuzzle && !wasIAAssist && !self.isIAAssist) {
+                                self.botPuzzle.destroy();
+                                self.botPuzzle = null;
                         }
 
                         if (window.bot) {
                                 window.bot.bestBotMove = null;
                                 window.bot.predictedBoard = null;
-                                if (!self.isCoopMode && typeof window.bot.clearGhostPreview === 'function') {
+                                // Limpiar fantasma si no es IA quien controla
+                                if (!self.isIAAssist && typeof window.bot.clearGhostPreview === 'function') {
                                         window.bot.clearGhostPreview();
                                 }
                                 if (typeof self.updateBotToggleLabel === 'function') {
                                         self.updateBotToggleLabel();
                                 }
                         }
-
                         self.updateResponsiveUnit();
                 }
 
@@ -780,7 +745,7 @@ function Tetris()
                 document.getElementById("tetris-keys").style.display = "none";
                 self.area = new Area(self.unit, self.areaX, self.areaY, "tetris-area");
                 self.humanPuzzle = new Puzzle(self, self.area, true);
-                self.botPuzzle = self.isCoopMode ? new Puzzle(self, self.area, false) : null;
+                self.botPuzzle = null; // En modo 'Solo' o 'IA-Assist', iniciamos sin pieza secundaria.
                 if (self.humanPuzzle.mayPlace()) {
                         self.humanPuzzle.place();
                 } else {
@@ -1869,16 +1834,6 @@ function Tetris()
                         // En modo cooperativo, la pieza del bot debe permanecer inerte hasta que se ejecute su jugada forzada.
                         var shouldAutoFall = this.isHumanControlled && !this.gravitySuspended;
                         this.fallDownID = shouldAutoFall ? setTimeout(this.fallDown, this.speed) : null;
-                        // Sincronizar creación de la siguiente pieza del bot y forzar su spawn inicial.
-                        if (this.isHumanControlled && this.tetris.botPuzzle && !this.tetris.botPuzzle.isRunning()) {
-                                var syncSeed = { current: this.type, next: this.nextType };
-                                this.tetris.botPuzzle.reset(syncSeed);
-
-                                if (this.tetris.botPuzzle.mayPlace()) {
-                                        this.tetris.botPuzzle.place();
-                                }
-                        }
-
                         // next puzzle (solo humano para mantener la UI limpia)
                         if (this.isHumanControlled) {
                                 this.clearNextPreview();
