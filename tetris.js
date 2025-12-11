@@ -98,17 +98,28 @@ function Tetris()
 		}
 	};
 
-	this.updateResponsiveUnit = function() {
-		var availableWidth = window.innerWidth * 0.9;
-		var availableHeight = window.innerHeight * 0.9;
-		var unitFromWidth = (availableWidth - 1) / (self.areaX + SIDEBAR_UNITS);
-		var unitFromHeight = (availableHeight - 1) / self.areaY;
-		var calculated = Math.max(10, Math.floor(Math.min(unitFromWidth, unitFromHeight)));
-		if (!calculated || calculated == self.unit) { self.updateCssScale(); return; }
-		self.unit = calculated;
-		self.updateCssScale();
-		self.rescaleBoard();
-	};
+        this.updateResponsiveUnit = function() {
+                // MEDIR EL CONTENEDOR EXACTO DEL JUEGO
+                var container = document.querySelector('.game-board');
+                var availableWidth = container ? container.clientWidth : window.innerWidth * 0.9;
+                var availableHeight = container ? container.clientHeight : window.innerHeight * 0.9;
+                
+                // Restar un pequeño padding para evitar scrollbars
+                availableWidth -= 10; 
+                availableHeight -= 10;
+
+                var unitFromWidth = availableWidth / (self.areaX + SIDEBAR_UNITS);
+                var unitFromHeight = availableHeight / self.areaY;
+                
+                // Calcular unidad máxima posible sin desbordar
+                var calculated = Math.max(10, Math.floor(Math.min(unitFromWidth, unitFromHeight)));
+
+                if (!calculated || calculated == self.unit) { self.updateCssScale(); return; }
+                
+                self.unit = calculated;
+                self.updateCssScale();
+                self.rescaleBoard();
+        };
 
 	// --- GESTIÓN DE MODOS ---
 
@@ -2218,6 +2229,7 @@ this.simulateDrop = function(rotation, targetX) {
         var referenceBoard = self.predictedBoard || self.tetris.area.board;
         var areaGrid = cloneAreaGrid(referenceBoard);
 
+        // [CORRECCIÓN] Usar la variable unificada
         var activePuzzle = self.tetris.puzzle;
         if (!activePuzzle) {
                 return logResult({ isValid: false, grid: [], linesCleared: 0, finalX: null, finalY: null, pieceGrid: null });
