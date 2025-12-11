@@ -834,25 +834,14 @@ function Tetris()
 	 * @return void
 	 * @access public event
 	 */
-        this.up = function(targetPuzzle)
-        {
-                if (self.inputLocked) { return; }
+        this.up = function() {
+                if (self.inputLocked || !self.humanPuzzle) return;
+                if (!self.humanPuzzle.isRunning() || self.humanPuzzle.isStopped()) return;
 
-                var actor = targetPuzzle || self.humanPuzzle;
-
-                // Protección total: ignorar entradas cuando el bot está al mando
-                if (!actor || !actor.isHumanControlled) { return; }
-
-                // Fast-fail: sin actor activo no hay nada que rotar.
-                if (!actor.isRunning() || actor.isStopped()) { return; }
-
-                if (actor.mayRotate()) {
-                        actor.rotate();
-
-                        if (actor.isHumanControlled) {
-                                self.stats.setActions(self.stats.getActions() + 1);
-                                actor.notifyBotAfterHumanMove();
-                        }
+                if (self.humanPuzzle.mayRotate()) {
+                        self.humanPuzzle.rotate();
+                        self.stats.setActions(self.stats.getActions() + 1);
+                        self.humanPuzzle.notifyBotAfterHumanMove();
                 }
         };
 
@@ -860,28 +849,15 @@ function Tetris()
 	 * @return void
 	 * @access public event
 	 */
-        this.down = function(targetPuzzle)
-        {
-                if (self.inputLocked) { return; }
+        this.down = function() {
+                if (self.inputLocked || !self.humanPuzzle) return;
+                if (!self.humanPuzzle.isRunning() || self.humanPuzzle.isStopped()) return;
 
-                var actor = targetPuzzle || self.humanPuzzle;
-
-                // Nunca operar sobre botPuzzle controlado por IA
-                if (!actor || !actor.isHumanControlled) { return; }
-
-                if (!actor.isRunning() || actor.isStopped()) { return; }
-
-                if (actor.mayMoveDown()) {
-                        if (actor.isHumanControlled) {
-                                self.stats.setScore(self.stats.getScore() + 5 + self.stats.getLevel());
-                                self.stats.setActions(self.stats.getActions() + 1);
-                        }
-
-                        actor.moveDown();
-
-                        if (actor.isHumanControlled) {
-                                actor.notifyBotAfterHumanMove();
-                        }
+                if (self.humanPuzzle.mayMoveDown()) {
+                        self.stats.setScore(self.stats.getScore() + 5 + self.stats.getLevel());
+                        self.stats.setActions(self.stats.getActions() + 1);
+                        self.humanPuzzle.moveDown();
+                        self.humanPuzzle.notifyBotAfterHumanMove();
                 }
         };
 
@@ -889,24 +865,14 @@ function Tetris()
 	 * @return void
 	 * @access public event
 	 */
-        this.left = function(targetPuzzle)
-        {
-                if (self.inputLocked) { return; }
+        this.left = function() {
+                if (self.inputLocked || !self.humanPuzzle) return;
+                if (!self.humanPuzzle.isRunning() || self.humanPuzzle.isStopped()) return;
 
-                var actor = targetPuzzle || self.humanPuzzle;
-
-                // Nunca operar sobre botPuzzle controlado por IA
-                if (!actor || !actor.isHumanControlled) { return; }
-
-                if (!actor.isRunning() || actor.isStopped()) { return; }
-
-                if (actor.mayMoveLeft()) {
-                        actor.moveLeft();
-
-                        if (actor.isHumanControlled) {
-                                self.stats.setActions(self.stats.getActions() + 1);
-                                actor.notifyBotAfterHumanMove();
-                        }
+                if (self.humanPuzzle.mayMoveLeft()) {
+                        self.humanPuzzle.moveLeft();
+                        self.stats.setActions(self.stats.getActions() + 1);
+                        self.humanPuzzle.notifyBotAfterHumanMove();
                 }
         };
 
@@ -914,24 +880,14 @@ function Tetris()
 	 * @return void
 	 * @access public event
 	 */
-        this.right = function(targetPuzzle)
-        {
-                if (self.inputLocked) { return; }
+        this.right = function() {
+                if (self.inputLocked || !self.humanPuzzle) return;
+                if (!self.humanPuzzle.isRunning() || self.humanPuzzle.isStopped()) return;
 
-                var actor = targetPuzzle || self.humanPuzzle;
-
-                // Nunca operar sobre botPuzzle controlado por IA
-                if (!actor || !actor.isHumanControlled) { return; }
-
-                if (!actor.isRunning() || actor.isStopped()) { return; }
-
-                if (actor.mayMoveRight()) {
-                        actor.moveRight();
-
-                        if (actor.isHumanControlled) {
-                                self.stats.setActions(self.stats.getActions() + 1);
-                                actor.notifyBotAfterHumanMove();
-                        }
+                if (self.humanPuzzle.mayMoveRight()) {
+                        self.humanPuzzle.moveRight();
+                        self.stats.setActions(self.stats.getActions() + 1);
+                        self.humanPuzzle.notifyBotAfterHumanMove();
                 }
         };
 
@@ -939,23 +895,13 @@ function Tetris()
 	 * @return void
 	 * @access public event
 	 */
-        this.space = function(targetPuzzle)
-        {
-                if (self.inputLocked) { return; }
+        this.space = function() {
+                if (self.inputLocked || !self.humanPuzzle) return;
+                if (!self.humanPuzzle.isRunning() || self.humanPuzzle.isStopped()) return;
 
-                var actor = targetPuzzle || self.humanPuzzle;
-
-                // Nunca operar sobre botPuzzle controlado por IA
-                if (!actor || !actor.isHumanControlled) { return; }
-
-                if (!actor.isRunning() || actor.isStopped()) { return; }
-
-                actor.stop();
-                actor.forceMoveDown();
-
-                if (actor.isHumanControlled) {
-                        actor.notifyBotAfterHumanMove();
-                }
+                self.humanPuzzle.stop();
+                self.humanPuzzle.forceMoveDown();
+                self.humanPuzzle.notifyBotAfterHumanMove();
         };
 
         /**
