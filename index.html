@@ -44,24 +44,24 @@
                 </div>
 
                 <div class="win95-block controls">
-                    <button class="btn-primary" id="playBtn" onclick="togglePlay()">▶ Play</button>
-                    <button class="btn-secondary" onclick="restartGame()">↻ New Game</button>
+                    <button class="btn-primary" id="playBtn">▶ Play</button>
+                    <button class="btn-secondary">↻ New Game</button>
                 </div>
 
                 <div class="win95-block settings-panel">
                     <div class="settings-header">
                         <p>Game Modes</p>
-                        <button class="toggle-btn" onclick="toggleSettingsDetail()" title="Settings">⚙️</button>
+                        <button class="toggle-btn" title="Settings">⚙️</button>
                     </div>
 
                     <div class="mode-switches" id="modeList">
                         <div class="switch-group">
                             <label for="iaAssistToggle">IA-ASSIST</label>
-                            <button type="button" class="switch" id="iaAssistToggle" onclick="toggleSwitch(this)"></button>
+                            <button type="button" class="switch" id="iaAssistToggle"></button>
                         </div>
                         <div class="switch-group">
                             <label for="zenToggle">Zen Mode</label>
-                            <button type="button" class="switch" id="zenToggle" onclick="toggleSwitch(this)"></button>
+                            <button type="button" class="switch" id="zenToggle"></button>
                         </div>
                     </div>
                 </div>
@@ -80,7 +80,7 @@
                     </select>
                 </div>
 
-                <button class="btn-secondary" onclick="toggleAudio()" id="audioBtn">🔊 Sound On</button>
+                <button class="btn-secondary" id="audioBtn">🔊 Sound On</button>
             </div>
             <div class="game-section">
                 <div class="game-board">
@@ -121,288 +121,7 @@
         <div id="tetris-gameover" style="display:none;"></div>
     </div>
 
-    <script>
-        let zoomRatio = 1;
-        let gameState = 'idle';
-        let isMuted = false;
-
-        var tetris = new Tetris();
-        tetris.unit = 20;
-        tetris.areaX = 12;
-        tetris.areaY = 22;
-
-        if (typeof TetrisBot === 'function') {
-            window.bot = new TetrisBot(tetris);
-            window.bot.enabled = false;
-        }
-
-        // Interceptar teclado: filtrado de eventos cuando la UI tiene el foco
-        const UI_FOCUS_SELECTOR = '.control-panel, input, select, textarea, button, .switch, .toggle-btn';
-        const LEGACY_GAME_KEYS = new Set([37, 38, 39, 40, 32]); // ←, ↑, →, ↓, Space
-        const MODERN_GAME_KEYS = new Set(['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown', ' ']);
-        const KEY_NAME_TO_CODE = {
-            ArrowLeft: 37,
-            ArrowUp: 38,
-            ArrowRight: 39,
-            ArrowDown: 40,
-            ' ': 32
-        };
-
-        /**
-         * Determina si algún elemento de la UI está activo o recibió el evento.
-         * Se usa para evitar que los atajos globales bloqueen al motor cuando no es necesario.
-         */
-        function uiHasFocus(event) {
-            const focused = document.activeElement && document.activeElement !== document.body
-                ? document.activeElement
-                : null;
-            const target = event && event.target && typeof event.target.closest === 'function'
-                ? event.target.closest(UI_FOCUS_SELECTOR)
-                : null;
-
-            if (target) {
-                return true; // Fast-fail: el evento proviene de la UI
-            }
-
-            return !!(focused && focused.closest(UI_FOCUS_SELECTOR));
-        }
-
-        /**
-         * Filtro de teclado en captura: bloquea entradas del juego cuando la UI tiene foco.
-         * También previene acciones del navegador (scroll, activación accidental) y detiene
-         * la propagación para evitar duplicados.
-         */
-        function interceptKeyboard(event) {
-            const keyName = typeof event.key === 'string' ? event.key : '';
-            const keyCode = typeof event.keyCode === 'number' ? event.keyCode : KEY_NAME_TO_CODE[keyName];
-
-            if (!uiHasFocus(event)) {
-                // El foco no está en la UI: el motor maneja el teclado sin interferencias externas.
-                if (MODERN_GAME_KEYS.has(keyName) || LEGACY_GAME_KEYS.has(keyCode)) {
-                    event.preventDefault();
-                }
-                return;
-            }
-
-            // El evento pertenece a la UI: anular comportamiento y evitar que el motor lo lea.
-            event.preventDefault();
-            if (typeof event.stopImmediatePropagation === 'function') {
-                event.stopImmediatePropagation();
-            } else {
-                event.stopPropagation();
-            }
-        }
-
-        window.addEventListener('keydown', interceptKeyboard, true);
-        window.addEventListener('keyup', interceptKeyboard, true);
-
-        // Evitar que elementos de la UI queden con foco y consuman la barra espaciadora
-        document.addEventListener('click', function (e) {
-            const uiEl = e.target.closest(UI_FOCUS_SELECTOR);
-            if (uiEl) {
-                setTimeout(function () {
-                    if (document.activeElement && document.activeElement !== document.body) {
-                        document.activeElement.blur();
-                    }
-                }, 0);
-            }
-        });
-
-        function generateGameGrid() {
-            const grid = document.getElementById('gameGrid');
-            grid.innerHTML = '';
-            for (let i = 0; i < 20; i++) {
-                const line = document.createElement('div');
-                line.className = 'grid-line-h';
-                line.style.top = `${(i + 1) * 5}%`;
-                grid.appendChild(line);
-            }
-            for (let i = 0; i < 12; i++) {
-                const line = document.createElement('div');
-                line.className = 'grid-line-v';
-                line.style.left = `${(i + 1) * 8.33}%`;
-                grid.appendChild(line);
-            }
-        }
-
-        function updateGameMessage(state) {
-            const message = document.getElementById('gameMessage');
-            message.className = 'game-message ' + state;
-            message.style.display = 'block';
-
-            switch (state) {
-                case 'idle':
-                    message.innerHTML = '<h2>PRESS START</h2><p>Ready to play?</p>';
-                    break;
-                case 'playing':
-                    message.style.display = 'none';
-                    break;
-                case 'paused':
-                    message.innerHTML = '<h2>PAUSED</h2>';
-                    break;
-                case 'gameover':
-                    let finalScore = tetris.stats.getScore();
-                    message.innerHTML = `<h2>GAME OVER</h2><p>Final Score: ${finalScore}</p>`;
-                    break;
-            }
-        }
-
-        function togglePlay() {
-            const btn = document.getElementById('playBtn');
-
-            if (gameState === 'idle' || gameState === 'gameover') {
-                gameState = 'playing';
-                btn.textContent = '⏸ Pause';
-                tetris.start();
-                updateGameMessage('playing');
-            } else if (gameState === 'playing') {
-                gameState = 'paused';
-                btn.textContent = '▶ Resume';
-                tetris.pause();
-                updateGameMessage('paused');
-            } else if (gameState === 'paused') {
-                gameState = 'playing';
-                btn.textContent = '⏸ Pause';
-                tetris.pause();
-                updateGameMessage('playing');
-            }
-        }
-
-        function restartGame() {
-            const modeState = pushEngineModeState({ coop: false, ia: false, zen: false });
-            syncBotSettingsVisibility(modeState);
-
-            tetris.reset();
-
-            if (window.bot) {
-                window.bot.enabled = false;
-                window.bot.currentPuzzle = null;
-                if (typeof window.bot.cancelPlanning === 'function') {
-                    window.bot.cancelPlanning();
-                }
-                if (typeof window.bot.clearGhostPreview === 'function') {
-                    window.bot.clearGhostPreview();
-                }
-            }
-
-            gameState = 'idle';
-            document.getElementById('playBtn').textContent = '▶ Play';
-            updateGameMessage('idle');
-        }
-
-        const originalGameOver = tetris.gameOver;
-        tetris.gameOver = function () {
-            originalGameOver.apply(tetris);
-            gameState = 'gameover';
-            document.getElementById('playBtn').textContent = '▶ Play';
-            updateGameMessage('gameover');
-        };
-
-        function syncBotController() {
-            if (window.bot) {
-                window.bot.enabled = (tetris.isCoopMode || tetris.isIAAssist);
-            }
-        }
-
-        function getEngineModeState() {
-            return {
-                coop: !!tetris.isCoopMode,
-                ia: !!tetris.isIAAssist,
-                zen: !!tetris.zenMode
-            };
-        }
-
-        function pushEngineModeState(modeUpdates) {
-            const currentState = getEngineModeState();
-            tetris.updateGameMode({
-                coop: modeUpdates.coop ?? currentState.coop,
-                ia: modeUpdates.ia ?? currentState.ia,
-                zen: modeUpdates.zen ?? currentState.zen
-            });
-            return getEngineModeState();
-        }
-
-        function syncBotSettingsVisibility(modeState) {
-            const botSettings = document.getElementById('botSettings');
-            if (botSettings) {
-                botSettings.classList.toggle('hidden', !modeState.ia);
-            }
-        }
-
-        function toggleSwitch(element) {
-            const currentState = getEngineModeState();
-            element.classList.toggle('active');
-            const isActive = element.classList.contains('active');
-            let updatedState = currentState;
-
-            if (element.id === 'iaAssistToggle') {
-                updatedState = pushEngineModeState({ ia: isActive });
-            } else if (element.id === 'zenToggle') {
-                updatedState = pushEngineModeState({ zen: isActive });
-            }
-
-            syncBotSettingsVisibility(updatedState);
-            syncBotController();
-            if (typeof tetris.updateModeStatus === 'function') {
-                tetris.updateModeStatus();
-            }
-        }
-
-        function toggleSettingsDetail() {
-            document.getElementById('modeList').classList.toggle('hidden');
-        }
-
-        function toggleAudio() {
-            isMuted = !isMuted;
-            document.getElementById('audioBtn').textContent = isMuted ? '🔇 Sound Off' : '🔊 Sound On';
-        }
-
-        function changeBotMode(mode) {
-            if (window.bot && window.bot.setGameplayMode) {
-                window.bot.setGameplayMode(window.bot.GamePlayMode[mode]);
-            }
-        }
-
-        window.addEventListener('load', () => {
-            generateGameGrid();
-            tetris.updateResponsiveUnit();
-            document.getElementById('botSettings').classList.add('hidden');
-        });
-
-        function fitBoard() {
-            const boardContainer = document.querySelector('.game-board');
-            const tetrisArea = document.getElementById('tetris-area');
-
-            if (!boardContainer || !tetrisArea) return;
-
-            tetrisArea.style.transform = 'none';
-
-            const availWidth = boardContainer.clientWidth;
-            const availHeight = boardContainer.clientHeight;
-
-            const boardWidth = tetrisArea.offsetWidth;
-            const boardHeight = tetrisArea.offsetHeight;
-
-            const padding = 20;
-
-            const scaleX = (availWidth - padding) / boardWidth;
-            const scaleY = (availHeight - padding) / boardHeight;
-
-            let scale = Math.min(scaleX, scaleY);
-
-            if (scale < 1) {
-                tetrisArea.style.transform = `scale(${scale})`;
-            } else {
-                tetrisArea.style.transform = `scale(1)`;
-            }
-        }
-
-        window.addEventListener('resize', fitBoard);
-        window.addEventListener('load', () => {
-            setTimeout(fitBoard, 100);
-            setInterval(fitBoard, 2000);
-        });
-    </script>
+    
 </body>
 
 </html>
