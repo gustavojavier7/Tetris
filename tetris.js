@@ -2492,43 +2492,135 @@ if (typeof window !== "undefined") {
 }
 
 
-// --- INICIALIZACIÓN FALTANTE ---
+// --- INICIALIZACIÓN COMPLETA DEL JUEGO ---
 document.addEventListener('DOMContentLoaded', function() {
-        // 1. Crear instancia del juego
-        var tetris = new Tetris();
-        window.tetris = tetris; // Para depuración
-
-        // 2. Crear instancia del bot y asignarla a window.bot (¡CRÍTICO!)
-        window.bot = new TetrisBot(tetris);
-
-        // 3. Configurar controles de UI (si existen)
-        var iaToggle = document.getElementById('iaAssistToggle');
-        var zenToggle = document.getElementById('zenToggle');
-
-        if (iaToggle) {
-            iaToggle.addEventListener('click', function() {
-                var currentIA = tetris.isIAAssist;
-                tetris.updateGameMode({ 
-                    ia: !currentIA, 
-                    zen: tetris.zenMode 
-                });
+    console.log('[INIT] 🔧 Inicializando Tetris Moderno con IA-ASSIST...');
+    
+    // 1. Crear instancia principal del juego
+    window.tetris = new Tetris();
+    console.log('[INIT] ✅ Tetris instanciado:', window.tetris);
+    
+    // 2. Crear instancia del bot IA
+    window.bot = new TetrisBot(window.tetris);
+    console.log('[INIT] ✅ Bot IA instanciado:', window.bot);
+    
+    // 3. CONEXIÓN CRÍTICA: Botones del HTML con funciones JS
+    
+    // 🔘 Botón PLAY (▶ Play)
+    var playBtn = document.getElementById('playBtn');
+    if (playBtn) {
+        playBtn.addEventListener('click', function() {
+            console.log('[UI] ▶ Botón PLAY presionado');
+            window.tetris.start();
+            // Actualizar mensaje del juego
+            var gameMessage = document.getElementById('gameMessage');
+            if (gameMessage) {
+                gameMessage.innerHTML = '<h2>¡JUEGO ACTIVO!</h2><p>Usa las flechas para mover</p>';
+                gameMessage.classList.remove('idle');
+                gameMessage.classList.add('active');
+            }
+        });
+    }
+    
+    // 🔘 Botón NEW GAME (el primer botón con clase .btn-secondary)
+    var newGameBtn = document.getElementById('newGameBtn') || document.querySelector('.btn-secondary');
+    if (newGameBtn && (newGameBtn.id === 'newGameBtn' || !newGameBtn.id)) {
+        newGameBtn.addEventListener('click', function() {
+            console.log('[UI] 🔄 Botón NEW GAME presionado');
+            if (window.tetris.puzzle && !confirm('¿Seguro que quieres empezar una nueva partida?')) {
+                return;
+            }
+            window.tetris.start();
+        });
+    }
+    
+    // 🔘 Toggle IA-ASSIST
+    var iaToggle = document.getElementById('iaAssistToggle');
+    if (iaToggle) {
+        iaToggle.addEventListener('click', function() {
+            console.log('[UI] 🤖 Botón IA-ASSIST presionado');
+            var currentIA = window.tetris.isIAAssist;
+            window.tetris.updateGameMode({ 
+                ia: !currentIA, 
+                zen: window.tetris.zenMode 
             });
-        }
-
-        if (zenToggle) {
-            zenToggle.addEventListener('click', function() {
-                var currentZen = tetris.zenMode;
-                tetris.updateGameMode({ 
-                    ia: tetris.isIAAssist, 
-                    zen: !currentZen 
-                });
+            
+            // Feedback visual inmediato
+            this.classList.toggle('active', !currentIA);
+        });
+    }
+    
+    // 🔘 Toggle ZEN MODE
+    var zenToggle = document.getElementById('zenToggle');
+    if (zenToggle) {
+        zenToggle.addEventListener('click', function() {
+            console.log('[UI] 🧘 Botón ZEN MODE presionado');
+            var currentZen = window.tetris.zenMode;
+            window.tetris.updateGameMode({ 
+                ia: window.tetris.isIAAssist, 
+                zen: !currentZen 
             });
+            
+            // Feedback visual inmediato
+            this.classList.toggle('active', !currentZen);
+        });
+    }
+    
+    // 🎮 Selector de estrategia del bot
+    var botModeSelect = document.getElementById('botMode');
+    if (botModeSelect && window.bot) {
+        botModeSelect.addEventListener('change', function() {
+            var mode = this.value;
+            console.log('[UI] 🧠 Estrategia del bot cambiada a:', mode);
+            
+            if (window.bot && window.bot.setGameplayMode) {
+                // Convertir string (ej: "SURVIVAL") a constante del enum
+                var modeEnum = window.bot.GamePlayMode[mode];
+                if (modeEnum) {
+                    window.bot.setGameplayMode(modeEnum);
+                }
+            }
+        });
+    }
+    
+    // 🔊 Botón de audio (placeholder - sin funcionalidad real)
+    var audioBtn = document.getElementById('audioBtn');
+    if (audioBtn) {
+        audioBtn.addEventListener('click', function() {
+            var isOn = this.textContent.includes('On');
+            this.textContent = isOn ? '🔇 Sound Off' : '🔊 Sound On';
+            console.log('[UI] 🔊 Audio ' + (isOn ? 'desactivado' : 'activado'));
+        });
+    }
+    
+    // 4. CONFIGURACIÓN RESPONSIVA
+    setTimeout(function() {
+        if (window.tetris.updateResponsiveUnit) {
+            window.tetris.updateResponsiveUnit();
         }
-
-        // 4. Inicializar escalado responsivo
-        setTimeout(function() {
-            tetris.updateResponsiveUnit();
-        }, 100);
-
-        console.log('[INIT] Tetris con IA-ASSIST inicializado');
+    }, 100);
+    
+    window.addEventListener('resize', function() {
+        if (window.tetris && window.tetris.updateResponsiveUnit) {
+            window.tetris.updateResponsiveUnit();
+        }
+    });
+    
+    // 5. INICIALIZACIÓN VISUAL
+    // Actualizar etiqueta del bot si existe
+    if (window.tetris.updateBotToggleLabel) {
+        window.tetris.updateBotToggleLabel();
+    }
+    
+    // Actualizar estado del modo
+    if (window.tetris.updateModeStatus) {
+        window.tetris.updateModeStatus();
+    }
+    
+    console.log('[INIT] 🎉 Tetris Moderno completamente inicializado y listo');
+    console.log('[INIT] 📊 Estado:', {
+        tetris: window.tetris ? 'OK' : 'ERROR',
+        bot: window.bot ? 'OK' : 'ERROR',
+        puzzle: window.tetris.puzzle ? 'Activo' : 'Inactivo'
+    });
 });
