@@ -134,6 +134,7 @@ function Tetris()
         this.areaY = 22;
         this.isCoopMode = false; // Estado explícito del modo de juego
         this.isIAAssist = false; // Flag interno para IA-ASSIST
+        this.iaPending = false; // Estado intermedio mientras se habilita el bot
         this.inputLocked = false; // Bloquea los comandos mientras se recalculan los modos
 
         this.highscores = new Highscores(10);
@@ -399,6 +400,9 @@ function Tetris()
          */
         this.applyOwnerRules = function()
         {
+                // Fast-fail: no alterar dueños mientras IA esté pendiente de habilitación
+                if (self.iaPending) { return; }
+
                 if (self.isIAAssist) {
                         self.humanPuzzle = null;
                         if (self.botPuzzle) {
@@ -480,6 +484,7 @@ function Tetris()
                 var requestedCoop = !!(modeState && modeState.coop);
                 var requestedIA = !!(modeState && modeState.ia);
                 var requestedZen = !!(modeState && modeState.zen);
+                var botIsReady = !!(window.bot && window.bot.enabled === true);
 
                 console.info('[SWAP] Aplicando reglas de modo', {
                         coop: requestedCoop,
@@ -492,9 +497,22 @@ function Tetris()
                         requestedIA = false;
                 }
 
+                // Resetear estado pendiente de IA cuando no se solicita
+                self.iaPending = false;
+
+                if (requestedIA && window.bot) {
+                        // Habilitar el bot antes de cualquier transferencia
+                        window.bot.enabled = true;
+                        botIsReady = window.bot.enabled === true;
+                }
+
+                if (requestedIA && !botIsReady) {
+                        self.iaPending = true;
+                }
+
                 var wasCoop = self.isCoopMode;
                 self.isCoopMode = requestedCoop;
-                self.isIAAssist = requestedIA;
+                self.isIAAssist = requestedIA && botIsReady;
                 self.zenMode = requestedZen;
                 self.areaX = 12;
                 self.areaY = 22;
@@ -588,10 +606,21 @@ function Tetris()
                         self.updateResponsiveUnit();
                 }
 
+                if (window.bot) {
+                        window.bot.enabled = (self.isCoopMode || self.isIAAssist || self.iaPending);
+                        if (typeof self.updateBotToggleLabel === 'function') {
+                                self.updateBotToggleLabel();
+                        }
+                }
+
                 if (self.isIAAssist) {
                         self.enableIAAssist();
-                } else {
+                } else if (!self.iaPending) {
                         self.disableIAAssist();
+                }
+
+                if (self.iaPending && window.bot && window.bot.enabled === true) {
+                        self.enableIAAssist();
                 }
 
                 self.applyOwnerRules();
@@ -600,13 +629,6 @@ function Tetris()
                         self.humanPuzzle.speed = self.zenMode ? 1000 : (80 + (700 / self.stats.getLevel()));
                         clearTimeout(self.humanPuzzle.fallDownID);
                         self.humanPuzzle.fallDownID = setTimeout(self.humanPuzzle.fallDown, self.humanPuzzle.speed);
-                }
-
-                if (window.bot) {
-                        window.bot.enabled = (self.isCoopMode || self.isIAAssist);
-                        if (typeof self.updateBotToggleLabel === 'function') {
-                                self.updateBotToggleLabel();
-                        }
                 }
 
                 self.updateModeStatus();
@@ -618,6 +640,14 @@ function Tetris()
         this.enableIAAssist = function()
         {
                 if (!self.humanPuzzle || self.humanPuzzle.isStopped()) { return; }
+
+                if (!window.bot || window.bot.enabled !== true) {
+                        console.warn('[IA-ASSIST] Bloqueado: bot no habilitado.');
+                        self.iaPending = true;
+                        return;
+                }
+
+                self.iaPending = false;
 
                 self.botPuzzle = self.humanPuzzle;
                 self.humanPuzzle = null;
@@ -656,6 +686,7 @@ function Tetris()
         {
                 if (!self.botPuzzle) { return; }
 
+                self.iaPending = false;
                 self.botPuzzle.isHumanControlled = true;
                 self.humanPuzzle = self.botPuzzle;
                 self.botPuzzle = null;
