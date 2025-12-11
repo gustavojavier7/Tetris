@@ -1440,7 +1440,6 @@ function Window(id)
 			document.cookie = name + "=; expires=Thu, 01-Jan-70 00:00:01 GMT";
 		};
 	}
-}
 
 if (!String.prototype.trim) {
 	String.prototype.trim = function() {
@@ -2307,111 +2306,116 @@ function buildPredictedBoard() {
         return mergePiece(baseGrid, humanPiece, posX, posY);
 }
 
-function cloneAreaGrid(board) {
-	var grid = [];
-	for (var y = 0; y < board.length; y++) {
-		grid.push([]);
-		for (var x = 0; x < board[y].length; x++) {
-			grid[y].push(board[y][x] ? 1 : 0);
-		}
-}
-return grid;
-}
-
-function clonePieceGrid(board) {
-	var grid = [];
-	for (var y = 0; y < board.length; y++) {
-		grid.push([]);
-		for (var x = 0; x < board[y].length; x++) {
-			grid[y].push(board[y][x] ? 1 : 0);
-		}
-}
-return grid;
-}
-
-function rotateGrid(matrix) {
-	var size = matrix.length;
-	var rotated = [];
-	for (var y = 0; y < size; y++) {
-		rotated.push([]);
-		for (var x = 0; x < size; x++) {
-			rotated[y].push(0);
-		}
-}
-
-for (var y2 = 0; y2 < size; y2++) {
-	for (var x2 = 0; x2 < size; x2++) {
-		if (matrix[y2][x2]) {
-			var newY = size - 1 - x2;
-			var newX = y2;
-			rotated[newY][newX] = 1;
-		}
-}
-}
-
-return rotated;
-}
-
-function isPositionValid(piece, posX, posY, areaGrid) {
-	for (var y = 0; y < piece.length; y++) {
-		for (var x = 0; x < piece[y].length; x++) {
-			if (piece[y][x]) {
-				var boardY = posY + y;
-				var boardX = posX + x;
-
-				if (boardY >= self.tetris.areaY) { return false; }
-				if (boardX < 0 || boardX >= self.tetris.areaX) { return false; }
-				if (areaGrid[boardY][boardX]) { return false; }
+	function cloneAreaGrid(board) {
+		var grid = [];
+		for (var y = 0; y < board.length; y++) {
+			grid.push([]);
+			for (var x = 0; x < board[y].length; x++) {
+				grid[y].push(board[y][x] ? 1 : 0);
 			}
+		}
+		return grid;
 	}
-}
-return true;
-}
 
-function mergePiece(areaGrid, piece, posX, posY) {
-	var grid = cloneAreaGrid(areaGrid);
-	for (var y = 0; y < piece.length; y++) {
-		for (var x = 0; x < piece[y].length; x++) {
-			if (piece[y][x]) {
-				grid[posY + y][posX + x] = 1;
+	function clonePieceGrid(board) {
+		var grid = [];
+		for (var y = 0; y < board.length; y++) {
+			grid.push([]);
+			for (var x = 0; x < board[y].length; x++) {
+				grid[y].push(board[y][x] ? 1 : 0);
 			}
+		}
+		return grid;
 	}
-}
-return grid;
-}
 
-function clearFullLines(grid) {
-	var cleared = 0;
-	var newGrid = [];
-	for (var y = grid.length - 1; y >= 0; y--) {
-		var isFull = true;
-		for (var x = 0; x < grid[y].length; x++) {
-			if (!grid[y][x]) {
-				isFull = false;
-				break;
+	function rotateGrid(matrix) {
+		var size = matrix.length;
+		var rotated = [];
+		for (var y = 0; y < size; y++) {
+			rotated.push([]);
+			for (var x = 0; x < size; x++) {
+				rotated[y].push(0);
 			}
+		}
+
+		for (var y2 = 0; y2 < size; y2++) {
+			for (var x2 = 0; x2 < size; x2++) {
+				if (matrix[y2][x2]) {
+					var newY = size - 1 - x2;
+					var newX = y2;
+					rotated[newY][newX] = 1;
+				}
+			}
+		}
+
+		return rotated;
 	}
 
-if (isFull) {
-	cleared++;
-} else {
-newGrid.unshift(grid[y].slice());
-}
-}
+	function isPositionValid(piece, posX, posY, areaGrid) {
+		for (var y = 0; y < piece.length; y++) {
+			for (var x = 0; x < piece[y].length; x++) {
+				if (piece[y][x]) {
+					var boardY = posY + y;
+					var boardX = posX + x;
 
-while (newGrid.length < self.tetris.areaY) {
-	var emptyRow = [];
-	for (var i = 0; i < self.tetris.areaX; i++) {
-		emptyRow.push(0);
+					if (boardY >= self.tetris.areaY) { return false; }
+					if (boardX < 0 || boardX >= self.tetris.areaX) { return false; }
+					if (areaGrid[boardY][boardX]) { return false; }
+				}
+			}
+		}
+		return true;
 	}
-newGrid.unshift(emptyRow);
-}
 
-return { grid: newGrid, lines: cleared };
-}
+	function mergePiece(areaGrid, piece, posX, posY) {
+		var grid = cloneAreaGrid(areaGrid);
+		for (var y = 0; y < piece.length; y++) {
+			for (var x = 0; x < piece[y].length; x++) {
+				if (piece[y][x]) {
+					grid[posY + y][posX + x] = 1;
+				}
+			}
+		}
+		return grid;
+	}
+
+	function clearFullLines(grid) {
+		var cleared = 0;
+		var newGrid = [];
+		for (var y = grid.length - 1; y >= 0; y--) {
+			var isFull = true;
+			for (var x = 0; x < grid[y].length; x++) {
+				if (!grid[y][x]) {
+					isFull = false;
+					break;
+				}
+			}
+
+			if (isFull) {
+				cleared++;
+			} else {
+				newGrid.unshift(grid[y].slice());
+			}
+		}
+
+		while (newGrid.length < self.tetris.areaY) {
+			var emptyRow = [];
+			for (var i = 0; i < self.tetris.areaX; i++) {
+				emptyRow.push(0);
+			}
+			newGrid.unshift(emptyRow);
+		}
+
+		return { grid: newGrid, lines: cleared };
+	}
 }
 
 // Exponer el bot en el ámbito global para evitar referencias indefinidas
-if (typeof window !== 'undefined') {
-        window.TetrisBot = TetrisBot;
+if (typeof window !== "undefined") {
+	window.TetrisBot = TetrisBot;
 }
+
+
+
+
+
