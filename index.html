@@ -274,10 +274,25 @@
         }
 
         function restartGame() {
-            gameState = 'playing';
-            document.getElementById('playBtn').textContent = '⏸ Pause';
-            tetris.start();
-            updateGameMessage('playing');
+            const modeState = pushEngineModeState({ coop: false, ia: false, zen: false });
+            syncBotSettingsVisibility(modeState);
+
+            tetris.reset();
+
+            if (window.bot) {
+                window.bot.enabled = false;
+                window.bot.currentPuzzle = null;
+                if (typeof window.bot.cancelPlanning === 'function') {
+                    window.bot.cancelPlanning();
+                }
+                if (typeof window.bot.clearGhostPreview === 'function') {
+                    window.bot.clearGhostPreview();
+                }
+            }
+
+            gameState = 'idle';
+            document.getElementById('playBtn').textContent = '▶ Play';
+            updateGameMessage('idle');
         }
 
         const originalGameOver = tetris.gameOver;
