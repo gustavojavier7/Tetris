@@ -674,9 +674,23 @@ function Tetris()
                         window.bot.enabled = true;
                         window.bot.currentPuzzle = self.botPuzzle;
                         window.bot.isThinking = false;
+
                         if (typeof window.bot.makeMove === 'function') {
+                                console.log("[IA-ASSIST] Calling makeMove()...");
                                 window.bot.makeMove();
                         }
+
+                        // 🔥 NUEVO: ejecutar inmediatamente la jugada encontrada por el bot
+                        setTimeout(function () {
+                                console.log("[IA-ASSIST] Checking for bestBotMove AFTER makeMove:", window.bot.bestBotMove);
+
+                                if (window.bot.bestBotMove) {
+                                        console.log("[IA-ASSIST] Executing bot move immediately...");
+                                        window.bot.executeStoredMove();
+                                } else {
+                                        console.warn("[IA-ASSIST] Bot has no best move to execute!");
+                                }
+                        }, 20);
                 }
 
                 if (self.botPuzzle && self.botPuzzle.isRunning()) {
