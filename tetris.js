@@ -651,6 +651,11 @@ function Tetris()
 
                 self.botPuzzle = self.humanPuzzle;
                 self.humanPuzzle = null;
+                console.log("[IA-ASSIST] Transfer complete.",
+                   "botPuzzle exists=", !!self.botPuzzle,
+                   "x=", self.botPuzzle.getX(),
+                   "y=", self.botPuzzle.getY(),
+                   "running=", self.botPuzzle.running);
                 self.isIAAssist = true;
                 self.botPuzzle.isHumanControlled = false;
                 self.botPuzzle.stopped = false;
@@ -2676,12 +2681,22 @@ this.setGameplayMode(this.gameplayMode);
 // --- BUCLE DE DECISIÓN (FAST-FAIL) ---
 
 this.makeMove = function() {
-        if (!self.enabled) { return; }
+        console.log("[BOT] makeMove() called. enabled=", self.enabled, "isThinking=", self.isThinking, "bestBotMove=", self.bestBotMove);
+        if (!self.enabled) {
+                console.warn("[BOT][ABORT] makeMove(): bot not enabled");
+                return;
+        }
         if (self.tetris.paused) { return; }
         var actorPuzzle = self.tetris.botPuzzle || self.tetris.humanPuzzle;
         if (!actorPuzzle || !actorPuzzle.isRunning()) { return; }
-        if (self.isThinking) { return; }
-        if (self.bestBotMove) { return; }
+        if (self.isThinking) {
+                console.warn("[BOT][ABORT] makeMove(): still thinking");
+                return;
+        }
+        if (self.bestBotMove) {
+                console.warn("[BOT][ABORT] makeMove(): move already pending");
+                return;
+        }
 
         self.isThinking = true;
 
@@ -2734,6 +2749,7 @@ this.executeStoredMove = function() {
 // --- EJECUCIÓN VISUAL (ANIMACIÓN) ---
 
 this.executeMoveSmoothly = function(move) {
+        console.log("[BOT] executeMoveSmoothly() called with move:", move);
         var actions = [];
 
         var actor = self.tetris.botPuzzle || self.tetris.humanPuzzle;
@@ -2761,20 +2777,22 @@ this.executeMoveSmoothly = function(move) {
                         return;
                 }
 
-        if (k < actions.length) {
-                var action = actions[k++];
+                if (k < actions.length) {
+                        var action = actions[k++];
 
-                if (action === 'up') { self.tetris.up(actor); }
-                else if (action === 'left') { self.tetris.left(actor); }
-                else if (action === 'right') { self.tetris.right(actor); }
-                else if (action === 'space') { self.tetris.space(actor); }
+                        console.log("[BOT][ACTION]", action, "currentX=", actor.getX());
 
-                setTimeout(playStep, 50);
-        } else {
-        self.isThinking = false;
-}
-}
-playStep();
+                        if (action === 'up') { self.tetris.up(actor); }
+                        else if (action === 'left') { self.tetris.left(actor); }
+                        else if (action === 'right') { self.tetris.right(actor); }
+                        else if (action === 'space') { self.tetris.space(actor); }
+
+                        setTimeout(playStep, 50);
+                } else {
+                        self.isThinking = false;
+                }
+        }
+        playStep();
                         };
 
 this.calculateBestMove = function() {
@@ -2782,6 +2800,9 @@ this.calculateBestMove = function() {
     var bestMove = null;
     var centerX = self.tetris.areaX / 2;
     var zeroHoleMoves = [];
+
+    var activePieceType = (self.tetris && self.tetris.botPuzzle) ? self.tetris.botPuzzle.type : 'unknown';
+    console.log("[BOT] calculating best move for piece type:", activePieceType);
 
     // --- Deuda estructural inicial: evaluar el costo de agujeros del tablero actual ---
     var initialGrid = cloneAreaGrid(self.tetris.area.board);
@@ -2791,7 +2812,10 @@ this.calculateBestMove = function() {
     for (var r = 0; r < 4; r++) {
         for (var x = 0; x < self.tetris.areaX; x++) {
             var simulation = self.simulateDrop(r, x);
-            if (!simulation.isValid) { continue; }
+            if (!simulation.isValid) {
+                console.warn("[BOT][SIM] invalid move for rotation=", r, "x=", x);
+                continue;
+            }
 
             var evaluation = self.evaluateGrid(simulation.grid, simulation.linesCleared);
             var score = evaluation.score;
@@ -2853,6 +2877,8 @@ this.calculateBestMove = function() {
         }
         return maxH;
     }
+
+    console.log("[BOT] bestMove result:", finalBestMove);
 
     return finalBestMove ? { rotation: finalBestMove.rotation, x: finalBestMove.x } : null;
 };
@@ -3125,56 +3151,64 @@ function simulateNextPiece(baseGrid, nextPiece) {
 
 // --- SIMULACIÓN FÍSICA ---
 this.simulateDrop = function(rotation, targetX) {
+        console.log("[BOT][SIM-DROP] Testing rotation=", rotation, "x=", targetX);
+
+        function logResult(result) {
+                console.log("[BOT][SIM-DROP] Result: isValid=", result.isValid,
+                        "finalX=", result.finalX, "finalY=", result.finalY);
+                return result;
+        }
+
         if (!self.tetris || !self.tetris.area) {
-                return { isValid: false, grid: [], linesCleared: 0, finalX: null, finalY: null, pieceGrid: null };
+                return logResult({ isValid: false, grid: [], linesCleared: 0, finalX: null, finalY: null, pieceGrid: null });
         }
 
-var referenceBoard = self.predictedBoard || self.tetris.area.board;
-var areaGrid = cloneAreaGrid(referenceBoard);
+        var referenceBoard = self.predictedBoard || self.tetris.area.board;
+        var areaGrid = cloneAreaGrid(referenceBoard);
 
-var activePuzzle = self.tetris.botPuzzle || self.tetris.humanPuzzle;
-if (!activePuzzle) {
-        return { isValid: false, grid: [], linesCleared: 0, finalX: null, finalY: null, pieceGrid: null };
-}
-
-var pieceGrid = clonePieceGrid(activePuzzle.board);
-
-if (!pieceGrid.length) {
-        return { isValid: false, grid: [], linesCleared: 0, finalX: null, finalY: null, pieceGrid: null };
-}
-
-for (var i = 0; i < rotation; i++) {
-        pieceGrid = rotateGrid(pieceGrid);
-}
-
-var posX = activePuzzle.getX();
-var posY = activePuzzle.getY();
-
-if (!isPositionValid(pieceGrid, posX, posY, areaGrid)) {
-        return { isValid: false, grid: [], linesCleared: 0, finalX: null, finalY: null, pieceGrid: null };
-}
-
-if (targetX < 0 || targetX >= self.tetris.areaX) {
-        return { isValid: false, grid: [], linesCleared: 0, finalX: null, finalY: null, pieceGrid: null };
-}
-
-var dir = targetX > posX ? 1 : -1;
-while (posX !== targetX) {
-        var nextX = posX + dir;
-        if (!isPositionValid(pieceGrid, nextX, posY, areaGrid)) {
-                return { isValid: false, grid: [], linesCleared: 0, finalX: null, finalY: null, pieceGrid: null };
+        var activePuzzle = self.tetris.botPuzzle || self.tetris.humanPuzzle;
+        if (!activePuzzle) {
+                return logResult({ isValid: false, grid: [], linesCleared: 0, finalX: null, finalY: null, pieceGrid: null });
         }
-posX = nextX;
-}
 
-while (isPositionValid(pieceGrid, posX, posY + 1, areaGrid)) {
-        posY++;
-}
+        var pieceGrid = clonePieceGrid(activePuzzle.board);
 
-var mergedGrid = mergePiece(areaGrid, pieceGrid, posX, posY);
-var cleared = clearFullLines(mergedGrid);
+        if (!pieceGrid.length) {
+                return logResult({ isValid: false, grid: [], linesCleared: 0, finalX: null, finalY: null, pieceGrid: null });
+        }
 
-return { isValid: true, grid: cleared.grid, linesCleared: cleared.lines, finalX: posX, finalY: posY, pieceGrid: pieceGrid };
+        for (var i = 0; i < rotation; i++) {
+                pieceGrid = rotateGrid(pieceGrid);
+        }
+
+        var posX = activePuzzle.getX();
+        var posY = activePuzzle.getY();
+
+        if (!isPositionValid(pieceGrid, posX, posY, areaGrid)) {
+                return logResult({ isValid: false, grid: [], linesCleared: 0, finalX: null, finalY: null, pieceGrid: null });
+        }
+
+        if (targetX < 0 || targetX >= self.tetris.areaX) {
+                return logResult({ isValid: false, grid: [], linesCleared: 0, finalX: null, finalY: null, pieceGrid: null });
+        }
+
+        var dir = targetX > posX ? 1 : -1;
+        while (posX !== targetX) {
+                var nextX = posX + dir;
+                if (!isPositionValid(pieceGrid, nextX, posY, areaGrid)) {
+                        return logResult({ isValid: false, grid: [], linesCleared: 0, finalX: null, finalY: null, pieceGrid: null });
+                }
+                posX = nextX;
+        }
+
+        while (isPositionValid(pieceGrid, posX, posY + 1, areaGrid)) {
+                posY++;
+        }
+
+        var mergedGrid = mergePiece(areaGrid, pieceGrid, posX, posY);
+        var cleared = clearFullLines(mergedGrid);
+
+        return logResult({ isValid: true, grid: cleared.grid, linesCleared: cleared.lines, finalX: posX, finalY: posY, pieceGrid: pieceGrid });
                         };
 
 // Construye el tablero proyectado incluyendo la posición final de la pieza humana.
