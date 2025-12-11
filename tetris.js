@@ -1863,7 +1863,7 @@ function Tetris()
                         }
                         this.running = true;
                         // En modo cooperativo, la pieza del bot debe permanecer inerte hasta que se ejecute su jugada forzada.
-                        var shouldAutoFall = !this.gravitySuspended && (this.isHumanControlled || !this.tetris.isCoopMode);
+                        var shouldAutoFall = this.isHumanControlled && !this.gravitySuspended;
                         this.fallDownID = shouldAutoFall ? setTimeout(this.fallDown, this.speed) : null;
                         // Sincronizar creación de la siguiente pieza del bot y forzar su spawn inicial.
                         if (this.isHumanControlled && this.tetris.botPuzzle && !this.tetris.botPuzzle.isRunning()) {
@@ -1897,18 +1897,28 @@ function Tetris()
                         this.tetris.updateControlStyles(this);
 
                         // Activar el bot para la nueva pieza cuando corresponda
-                        if (this.tetris && this.tetris.isIAAssist && window.bot && window.bot.enabled) {
+                        if (window.bot && window.bot.enabled) {
                                 var botActor = this.tetris.botPuzzle || this;
 
-                                if (typeof botActor.suspendGravity === "function") {
-                                        botActor.suspendGravity();
+                                // R1: Sin gravedad automática para piezas bot.
+                                if (!botActor.isHumanControlled) {
+                                        botActor.fallDownID = null;
                                 }
 
-                                window.bot.currentPuzzle = botActor;
-                                window.bot.isThinking = false;
-                                window.bot.bestBotMove = null;
-                                window.bot.predictedBoard = null;
-                                window.bot.makeMove();
+                                if (this.tetris && this.tetris.isIAAssist) {
+                                        if (typeof botActor.suspendGravity === "function") {
+                                                botActor.suspendGravity();
+                                        }
+                                }
+
+                                if (!botActor.isHumanControlled || (this.tetris && this.tetris.isIAAssist)) {
+                                        window.bot.currentPuzzle = botActor;
+                                        window.bot.isThinking = false;
+                                        window.bot.bestBotMove = null;
+                                        window.bot.predictedBoard = null;
+                                        window.bot.makeMove();
+                                        window.bot.executeStoredMove();
+                                }
                         }
                 };
 
@@ -2000,8 +2010,11 @@ function Tetris()
 		 */
                 this.fallDown = function()
                 {
+                        if (!self.isHumanControlled) {
+                                self.fallDownID = null;
+                                return true;
+                        }
                         if (self.gravitySuspended) { return; }
-                        if (!self.isHumanControlled && self.tetris.isCoopMode && !self.tetris.isIAAssist) { return; }
 
                         if (self.isRunning()) {
                                 if (self.mayMoveDown()) {
