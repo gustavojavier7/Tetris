@@ -1914,6 +1914,7 @@ function Tetris()
 		 */
                 this.fallDown = function()
                 {
+                        // [CORRECCIÓN] Guardia estricta: Solo piezas humanas tienen gravedad automática.
                         if (!self.isHumanControlled) {
                                 self.fallDownID = null;
                                 return true;
