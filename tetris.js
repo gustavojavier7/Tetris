@@ -199,29 +199,15 @@ function Tetris()
                 self.updateControlStyles(self.puzzle);
         };
 
-        this.disableIAAssist = function() {
-                if (!self.puzzle) return;
+                this.disableIAAssist = function() {
+                        if (!self.puzzle) return;
 
-                console.log("[IA] Devolviendo control.");
-                self.puzzle.isHumanControlled = true;
-                self.controlState = 'HUMAN';
+                        console.log("[IA] Devolviendo control.");
+                        self.puzzle.isHumanControlled = true;
+                        self.controlState = 'HUMAN';
 
-                // Reactivar gravedad
-                self.puzzle.resumeGravity(true);
-
-                self.updateControlStyles(self.puzzle);
-
-                if (window.bot) {
-                        // [NUEVO] Limpiar el watchdog
-                        if (window.bot.assistInterval) {
-                                clearInterval(window.bot.assistInterval);
-                                window.bot.assistInterval = null;
-                        }
-                        
-                        window.bot.enabled = false;
-                        // ...
-                }
-        };
+                        self.puzzle.resumeGravity(true);
+                };
 
         this.transferControlToIA = function() {
                 if (self.controlState !== 'HUMAN') {
@@ -517,11 +503,12 @@ function Tetris()
                         this.clearFallDownTimer();
                 };
 
-		this.resumeGravity = function(restart) {
-                        if (restart && this.running && !this.stopped && this.isHumanControlled) {
-                                this.clearFallDownTimer();
-                                this.fallDownID = setTimeout(this.fallDown, this.speed);
-                        }
+                this.resumeGravity = function(forceRestart) {
+                        if (!forceRestart) return;
+                        if (!this.running || this.stopped) return;
+
+                        this.clearFallDownTimer();
+                        this.fallDownID = setTimeout(() => this.fallDown(), this.speed);
                 };
 
 		this.reset = function() {
