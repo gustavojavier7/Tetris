@@ -420,7 +420,6 @@ button:active {
         transform: translateY(0);
 }
 
-#tetris-keys,
 .keyboard-guide,
 .footer {
         display: none !important;
