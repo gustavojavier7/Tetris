@@ -1941,7 +1941,6 @@ this.executeMoveSmoothly = function(move) {
                         return;
                 }
 
-                actor.stop();
                 actor.forceMoveDownDelay = 50;
                 actor.forceMoveDown();
                 self.isThinking = false;
