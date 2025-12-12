@@ -1884,6 +1884,7 @@ this.makeMove = function() {
 // --- EJECUCIÓN DIFERIDA TRAS EL LOCK HUMANO ---
 
 this.executeStoredMove = function() {
+        console.log('[BOT] executeStoredMove() called', self.bestBotMove);
         if (!self.bestBotMove) { return; }
 
         // Si el bot está apagado, limpiar la jugada pendiente para evitar bloqueos futuros.
