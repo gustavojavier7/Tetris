@@ -882,44 +882,52 @@ function Tetris()
 	}
 
         this.bindKeyboardControls = function() {
-                if (!self.keyboard) {
-                        self.keyboard = new Keyboard();
-                }
+                if (self.keyboardBound) return;
+                if (!self.keyboard) self.keyboard = new Keyboard();
 
-                var canControl = self.controlState === 'HUMAN' && !self.inputLocked;
                 self.keyboard.tetris = self;
+                self.keyboardHandlers = self.keyboardHandlers || {};
 
-                var bindAction = function(key, handler, label) {
-                        self.keyboard.set(key, function() {
-                                if (!self.canHumanControlPiece(label)) return;
-                                handler();
-                        });
+                var ensureHandler = function(key, label, action) {
+                        if (!self.keyboardHandlers[label]) {
+                                self.keyboardHandlers[label] = function() {
+                                        if (!self.canHumanControlPiece(label)) return;
+                                        action();
+                                };
+                        }
+                        self.keyboard.set(key, self.keyboardHandlers[label]);
                 };
 
-                bindAction(self.keyboard.left, self.left, 'LEFT');
-                bindAction(self.keyboard.right, self.right, 'RIGHT');
-                bindAction(self.keyboard.up, self.up, 'UP');
-                bindAction(self.keyboard.down, self.down, 'DOWN');
-                bindAction(self.keyboard.space, self.space, 'SPACE');
+                ensureHandler(self.keyboard.left, 'LEFT', self.left);
+                ensureHandler(self.keyboard.right, 'RIGHT', self.right);
+                ensureHandler(self.keyboard.up, 'UP', self.up);
+                ensureHandler(self.keyboard.down, 'DOWN', self.down);
+                ensureHandler(self.keyboard.space, 'SPACE', self.space);
 
-                self.keyboard.set(self.keyboard.p, function() {
-                        if (self.inputLocked) {
-                                console.warn('[CONTROL] Acción de pausa bloqueada mientras inputLocked está activo.');
-                                return;
-                        }
-                        self.pause();
-                });
-                self.keyboard.set(self.keyboard.n, function() {
-                        if (self.inputLocked) {
-                                console.warn('[CONTROL] Acción de nuevo juego bloqueada mientras inputLocked está activo.');
-                                return;
-                        }
-                        self.start();
-                });
-
-                if (!canControl) {
-                        console.log("[CONTROL] Los controles están bloqueados.");
+                if (!self.keyboardHandlers.PAUSE) {
+                        self.keyboardHandlers.PAUSE = function() {
+                                if (self.inputLocked) {
+                                        console.warn('[CONTROL] Acción de pausa bloqueada mientras inputLocked está activo.');
+                                        return;
+                                }
+                                self.pause();
+                        };
                 }
+
+                if (!self.keyboardHandlers.START) {
+                        self.keyboardHandlers.START = function() {
+                                if (self.inputLocked) {
+                                        console.warn('[CONTROL] Acción de nuevo juego bloqueada mientras inputLocked está activo.');
+                                        return;
+                                }
+                                self.start();
+                        };
+                }
+
+                self.keyboard.set(self.keyboard.p, self.keyboardHandlers.PAUSE);
+                self.keyboard.set(self.keyboard.n, self.keyboardHandlers.START);
+
+                self.keyboardBound = true;
         };
 
         this.bindKeyboardControls();
