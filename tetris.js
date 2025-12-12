@@ -19,7 +19,9 @@ function Tetris()
 	this.areaY = 22;
 
 	// Estados del control
-	this.controlState = 'HUMAN'; // 'HUMAN', 'TRANSITIONING_TO_IA', 'IA'
+        this.controlState = 'HUMAN'; // 'HUMAN', 'TRANSITIONING_TO_IA', 'IA'
+        this.botReadyInterval = null;
+        this.botReadyTimeout = null;
 	
 	// Modos
 	this.isIAAssist = false; 
@@ -248,16 +250,48 @@ function Tetris()
         };
 
         this.transferControlToIA = function() {
-                if (self.controlState !== 'HUMAN') return;
+                if (self.controlState !== 'HUMAN') {
+                        console.warn('[IA] Transferencia ignorada: controlState no es HUMANO.', self.controlState);
+                        return;
+                }
 
+                console.log('[IA] Iniciando transferencia de control a bot.');
                 self.controlState = 'TRANSITIONING_TO_IA';
 
                 if (self.puzzle) self.puzzle.suspendGravity();
 
-                var checkBotReady = setInterval(function() {
-                        if (window.bot && window.bot.enabled && !window.bot.isThinking) {
-                                clearInterval(checkBotReady);
+                if (self.botReadyInterval) {
+                        clearInterval(self.botReadyInterval);
+                        self.botReadyInterval = null;
+                }
+                if (self.botReadyTimeout) {
+                        clearTimeout(self.botReadyTimeout);
+                        self.botReadyTimeout = null;
+                }
 
+                self.botReadyTimeout = setTimeout(function() {
+                        console.error('[IA][FAST-FAIL] Bot no se declaró listo dentro del tiempo de espera. Revirtiendo control.');
+                        if (self.botReadyInterval) {
+                                clearInterval(self.botReadyInterval);
+                                self.botReadyInterval = null;
+                        }
+                        self.controlState = 'HUMAN';
+                        if (self.puzzle) {
+                                self.puzzle.isHumanControlled = true;
+                                self.puzzle.resumeGravity(true);
+                        }
+                }, 2500);
+
+                self.botReadyInterval = setInterval(function() {
+                        if (window.bot && window.bot.enabled && !window.bot.isThinking) {
+                                clearInterval(self.botReadyInterval);
+                                self.botReadyInterval = null;
+                                if (self.botReadyTimeout) {
+                                        clearTimeout(self.botReadyTimeout);
+                                        self.botReadyTimeout = null;
+                                }
+
+                                console.log('[IA] Bot listo. Transferencia completada.');
                                 self.controlState = 'IA';
                                 if (self.puzzle) {
                                         self.puzzle.isHumanControlled = false;
