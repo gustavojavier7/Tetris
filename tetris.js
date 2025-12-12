@@ -544,12 +544,17 @@ function Tetris()
 			return true;
 		};
 
-		this.place = function() {
-			// Stats
-			this.tetris.stats.setPuzzles(this.tetris.stats.getPuzzles() + 1);
-			if (this.tetris.stats.getPuzzles() >= (10 + this.tetris.stats.getLevel() * 2)) {
-				this.tetris.stats.setLevel(this.tetris.stats.getLevel() + 1);
-				this.tetris.stats.setPuzzles(0);
+                this.place = function() {
+                        // HEREDAR CONTROL IA A LA NUEVA PIEZA
+                        if (this.tetris.isIAAssist) {
+                                this.isHumanControlled = false;
+                        }
+
+                        // Stats
+                        this.tetris.stats.setPuzzles(this.tetris.stats.getPuzzles() + 1);
+                        if (this.tetris.stats.getPuzzles() >= (10 + this.tetris.stats.getLevel() * 2)) {
+                                this.tetris.stats.setLevel(this.tetris.stats.getLevel() + 1);
+                                this.tetris.stats.setPuzzles(0);
 			}
 
 			var puzzle = this.puzzles[this.type];
