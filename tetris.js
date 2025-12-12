@@ -932,7 +932,6 @@ function Window(id)
 		this.funcs = [];
 
                 var self = this;
-                var UI_FOCUS_SELECTORS = ".control-panel, input, select, textarea, button, .switch, .toggle-btn";
                 var ALLOWED_GAME_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "]); // Compatibilidad con navegadores modernos.
                 var LEGACY_GAME_KEYS = new Set([self.left, self.right, self.up, self.down, self.space]);
                 var KEY_NAME_TO_CODE = {
@@ -948,16 +947,20 @@ function Window(id)
                  * el motor procese entradas cuando el jugador interactúa con botones u opciones.
                  */
                 var isUIFocused = function(event) {
-                        var targetMatch = event && event.target && typeof event.target.closest === "function"
-                                ? event.target.closest(UI_FOCUS_SELECTORS)
-                                : null;
+                        var active = document.activeElement;
 
-                        if (targetMatch) {
+                        // Solo bloquear si el foco es un input editable (permitir botones, toggles, etc.)
+                        if (!active) return false;
+
+                        if (
+                                active.tagName === "INPUT" ||
+                                active.tagName === "TEXTAREA" ||
+                                active.isContentEditable
+                        ) {
                                 return true;
                         }
 
-                        var activeElement = document.activeElement;
-                        return !!(activeElement && activeElement !== document.body && typeof activeElement.closest === "function" && activeElement.closest(UI_FOCUS_SELECTORS));
+                        return false;
                 };
 
 		/**
