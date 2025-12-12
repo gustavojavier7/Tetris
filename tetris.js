@@ -163,11 +163,8 @@ function Tetris()
 		var zenCheckbox = document.getElementById('tetris-zen-mode');
 		if (zenCheckbox) zenCheckbox.checked = self.zenMode;
 		
-		var indicator = document.getElementById('mode-indicator');
-		if (indicator) indicator.innerHTML = self.isIAAssist ? 'Modo: IA-ASSIST' : 'Modo: CLÁSICO';
-
-		var iaToggle = document.getElementById('iaAssistToggle');
-		if (iaToggle) iaToggle.classList.toggle('active', self.isIAAssist);
+                var iaToggle = document.getElementById('iaAssistToggle');
+                if (iaToggle) iaToggle.classList.toggle('active', self.isIAAssist);
 		var zenToggle = document.getElementById('zenToggle');
 		if (zenToggle) zenToggle.classList.toggle('active', self.zenMode);
 
@@ -277,20 +274,34 @@ function Tetris()
 		actor.elements.forEach(toggleVisual);
 	};
 
-	this.updateModeStatus = function() {
-		var el = document.getElementById('mode-status');
-		if (!el) return;
-		if (self.isIAAssist) {
-			el.textContent = 'MODO: IA-ASSIST (Automático)';
-			el.style.color = '#00e5ff';
-		} else if (self.zenMode) {
-			el.textContent = 'MODO: ZEN';
-			el.style.color = '#ffaa00';
-		} else {
-			el.textContent = 'MODO: CLÁSICO';
-			el.style.color = '#ffffff';
-		}
-	};
+        this.updateModeStatus = function() {
+                var el = document.getElementById('mode-status');
+                if (!el) return;
+                var modeLabel = 'MODO: CLÁSICO';
+                var color = '#ffffff';
+
+                if (self.isIAAssist) {
+                        modeLabel = 'MODO: IA-ASSIST (Automático)';
+                        color = '#00e5ff';
+                } else if (self.zenMode) {
+                        modeLabel = 'MODO: ZEN';
+                        color = '#ffaa00';
+                }
+
+                var botMode = null;
+                if (window.bot) {
+                        botMode = window.bot.activeBotModeName;
+                        if (!botMode && window.bot.getModeName && window.bot.gameplayMode) {
+                                botMode = window.bot.getModeName(window.bot.gameplayMode);
+                        }
+                        if (botMode) {
+                                modeLabel += ' • Estrategia: ' + botMode;
+                        }
+                }
+
+                el.textContent = modeLabel;
+                el.style.color = color;
+        };
 
 	this.updateBotToggleLabel = function() {
 		var botLabel = document.getElementById("tetris-menu-ai");
@@ -1640,9 +1651,10 @@ this.setGameplayMode = function(mode) {
         self.gameplayMode = mode;
         lastAutoMode = mode;
 
-        var indicator = document.getElementById("mode-indicator");
-        if (indicator) {
-                indicator.textContent = "Modo Bot: " + self.getModeName(mode);
+        self.activeBotModeName = self.getModeName(mode);
+
+        if (self.tetris && self.tetris.updateModeStatus) {
+                self.tetris.updateModeStatus();
         }
 
 // Silenciado
@@ -2219,9 +2231,10 @@ this.evaluateGrid = function(grid, linesCleared, skipLookahead) {
 
     var modeName = Object.keys(GamePlayMode).find(function(key) { return GamePlayMode[key] === modeToUse; }) || self.getModeName(modeToUse);
 
-    var indicator = document.getElementById("mode-indicator");
-    if (indicator) {
-            indicator.innerText = "Modo Bot: " + modeName;
+    self.activeBotModeName = modeName;
+
+    if (self.tetris && self.tetris.updateModeStatus) {
+            self.tetris.updateModeStatus();
     }
 
     // --- LOOKAHEAD DINÁMICO ---
