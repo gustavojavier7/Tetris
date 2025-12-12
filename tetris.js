@@ -517,10 +517,12 @@ function Tetris()
                         this.clearFallDownTimer();
                 };
 
-		this.resumeGravity = function(restart) {
-                        if (restart && this.running && !this.stopped && this.isHumanControlled) {
-                                this.clearFallDownTimer();
-                                this.fallDownID = setTimeout(this.fallDown, this.speed);
+                this.resumeGravity = function(restart) {
+                        if (!restart) return;
+
+                        if (self.running && !self.stopped && self.isHumanControlled) {
+                                self.clearFallDownTimer();
+                                self.fallDownID = setTimeout(self.fallDown, self.speed);
                         }
                 };
 
@@ -1954,7 +1956,6 @@ this.executeMoveSmoothly = function(move) {
                         return;
                 }
 
-                actor.stop();
                 actor.forceMoveDownDelay = 50;
                 actor.forceMoveDown();
                 self.isThinking = false;
