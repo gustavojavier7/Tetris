@@ -558,22 +558,10 @@ function Tetris()
                  * Previene transferencia de control y carreras con la FSM.
                  */
                 this.notifyBotAfterHumanMove = function() {
-                        // Solo aplica en modo asistencia, no en control total IA
-                        if (!window.bot || !window.bot.enabled) return;
-                        if (!this.isHumanControlled) return;
-
-                        // Solo IA-ASSIST o transición, nunca IA plena
-                        if (this.tetris.controlState !== 'HUMAN' && this.tetris.controlState !== 'TRANSITIONING_TO_IA') {
-                                return;
-                        }
-
-                        // Evitar reentrancia o planes obsoletos
-                        window.bot.cancelPlanning();
-
-                        // Mantener contexto actualizado sin ejecutar la jugada
-                        window.bot.currentPuzzle = this;
-                        window.bot.makeMove();
-                };
+    if (!this.tetris || this.tetris.controlState !== 'HUMAN') {
+        return;
+    }
+};
 
                 this.isRunning = function() { return this.running; };
                 this.isStopped = function() { return this.stopped; };
