@@ -203,6 +203,14 @@ function Tetris()
                         if (!self.puzzle) return;
 
                         console.log("[IA] Devolviendo control.");
+                        if (self.botReadyInterval) {
+                                clearInterval(self.botReadyInterval);
+                                self.botReadyInterval = null;
+                        }
+                        if (self.botReadyTimeout) {
+                                clearTimeout(self.botReadyTimeout);
+                                self.botReadyTimeout = null;
+                        }
                         self.controlState = 'HUMAN';
                         self.resyncControlState();
                 };
@@ -600,9 +608,6 @@ function Tetris()
 		};
 
                 this.place = function() {
-                        // Sincronizar control con el estado actual del juego
-                        this.isHumanControlled = (this.tetris.controlState === 'HUMAN');
-
                         // Stats
                         this.tetris.stats.setPuzzles(this.tetris.stats.getPuzzles() + 1);
                         if (this.tetris.stats.getPuzzles() >= (10 + this.tetris.stats.getLevel() * 2)) {
