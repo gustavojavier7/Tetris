@@ -439,22 +439,21 @@ function Tetris()
 			isStopped: self.puzzle ? self.puzzle.isStopped() : "N/A"
 		});
 
-		if (self.inputLocked || !self.puzzle || !self.puzzle.isHumanControlled) {
-			console.warn("[CONTROL] Movimiento RECHAZADO por guardias.");
-			return;
-		}
-		if (!self.puzzle.isRunning() || self.puzzle.isStopped()) {
+                if (self.inputLocked || !self.puzzle || !self.puzzle.isHumanControlled) {
+                        console.warn("[CONTROL] Movimiento RECHAZADO por guardias.");
+                        return;
+                }
+                if (!self.puzzle.isRunning() || self.puzzle.isStopped()) {
 			console.warn("[CONTROL] Movimiento RECHAZADO: pieza detenida.");
 			return;
 		}
 
-		console.log("[CONTROL] Movimiento ACEPTADO. Ejecutando...");
-		if (self.puzzle.mayMoveLeft()) {
-			self.puzzle.moveLeft();
-			self.stats.setActions(self.stats.getActions() + 1);
-			self.puzzle.notifyBotAfterHumanMove(); // Hint mode (opcional)
-		}
-	};
+                console.log("[CONTROL] Movimiento ACEPTADO. Ejecutando...");
+                if (self.puzzle.mayMoveLeft()) {
+                        self.puzzle.moveLeft();
+                        self.stats.setActions(self.stats.getActions() + 1);
+                }
+        };
 
 	this.right = function() {
 		if (self.inputLocked || !self.puzzle || !self.puzzle.isHumanControlled) return;
@@ -554,10 +553,32 @@ function Tetris()
 
                 this.reset(); // reset() ya establece nextType internamente
 
-		this.isRunning = function() { return this.running; };
-		this.isStopped = function() { return this.stopped; };
-		this.getX = function() { return this.x; };
-		this.getY = function() { return this.y; };
+                /**
+                 * Recalcula la sugerencia del bot tras un movimiento humano sin ejecutar la jugada.
+                 * Previene transferencia de control y carreras con la FSM.
+                 */
+                this.notifyBotAfterHumanMove = function() {
+                        // Solo aplica en modo asistencia, no en control total IA
+                        if (!window.bot || !window.bot.enabled) return;
+                        if (!this.isHumanControlled) return;
+
+                        // Solo IA-ASSIST o transición, nunca IA plena
+                        if (this.tetris.controlState !== 'HUMAN' && this.tetris.controlState !== 'TRANSITIONING_TO_IA') {
+                                return;
+                        }
+
+                        // Evitar reentrancia o planes obsoletos
+                        window.bot.cancelPlanning();
+
+                        // Mantener contexto actualizado sin ejecutar la jugada
+                        window.bot.currentPuzzle = this;
+                        window.bot.makeMove();
+                };
+
+                this.isRunning = function() { return this.running; };
+                this.isStopped = function() { return this.stopped; };
+                this.getX = function() { return this.x; };
+                this.getY = function() { return this.y; };
 
 		this.mayPlace = function() {
 			var puzzle = this.puzzles[this.type];
