@@ -218,9 +218,7 @@ function Tetris()
                                 window.bot.assistInterval = null;
                         }
                         
-                        if (!self.isCoopMode) {
-                                window.bot.enabled = false;
-                        }
+                        window.bot.enabled = false;
                         // ...
                 }
         };
