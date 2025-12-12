@@ -367,7 +367,7 @@ function Tetris()
                 document.getElementById('tetris-resume').style.display = 'none';
         };
 
-	this.pause = function() {
+        this.pause = function() {
                 if (!self.puzzle) return;
                 if (self.paused) {
                         // Resume
@@ -377,12 +377,11 @@ function Tetris()
                         } else if (self.isIAAssist && window.bot) {
                                 // Reactivar bot si estaba pausado
                                 window.bot.makeMove();
-                                window.bot.executeStoredMove();
                         }
-			document.getElementById('tetris-pause').style.display = 'block';
-			document.getElementById('tetris-resume').style.display = 'none';
-			self.stats.timerId = setInterval(self.stats.incTime, 1000);
-			self.paused = false;
+                        document.getElementById('tetris-pause').style.display = 'block';
+                        document.getElementById('tetris-resume').style.display = 'none';
+                        self.stats.timerId = setInterval(self.stats.incTime, 1000);
+                        self.paused = false;
 		} else {
 			// Pause
 			if (!self.puzzle.isRunning()) return;
@@ -580,12 +579,10 @@ function Tetris()
 		};
 
                 this.place = function() {
-                        // HEREDAR CONTROL IA A LA NUEVA PIEZA
-                        if (this.tetris.controlState === 'IA') {
-                                this.isHumanControlled = false;
-                        }
-
-                        var botMoveTriggered = false;
+                // HEREDAR CONTROL IA A LA NUEVA PIEZA
+                if (this.tetris.controlState === 'IA') {
+                        this.isHumanControlled = false;
+                }
 
                         // Stats
                         this.tetris.stats.setPuzzles(this.tetris.stats.getPuzzles() + 1);
@@ -627,9 +624,6 @@ function Tetris()
                         this.clearFallDownTimer();
                         if (this.isHumanControlled) {
                                 this.fallDownID = setTimeout(this.fallDown, this.speed);
-                        } else if (this.tetris.controlState === 'IA' && window.bot) {
-                                window.bot.makeMove();
-                                botMoveTriggered = true;
                         }
 
 			// Renderizar siguiente pieza
@@ -647,38 +641,13 @@ function Tetris()
 				}
 			}
 
-			this.tetris.updateControlStyles(this);
+                        this.tetris.updateControlStyles(this);
 
-                        // --- BLOQUE BOT REPARADO ---
-                        // Solo activar si el bot está encendido y la pieza NO es humana
+                        // Transferir el control al bot sin temporizadores duplicados.
                         if (window.bot && window.bot.enabled && !this.isHumanControlled) {
-
-                                // 1. Asegurar referencia y estado
                                 window.bot.currentPuzzle = this;
-                                window.bot.isThinking = false;
-                                window.bot.bestBotMove = null;
-
-                                // 2. Usar Timeout para desacoplar el renderizado del cálculo (Evita race conditions)
-                                setTimeout(function() {
-                                        console.log("[IA] Ciclo iniciado en place()...");
-
-                                        // PENSAR
-                                        if (!botMoveTriggered) {
-                                                window.bot.makeMove();
-                                                botMoveTriggered = true;
-                                        }
-
-                                        // ACTUAR (Dar tiempo al cerebro para poblar bestBotMove)
-                                        setTimeout(function() {
-                                                if (window.bot.bestBotMove) {
-                                                        window.bot.executeStoredMove();
-                                                } else {
-                                                        console.warn("[IA] No se encontró jugada, reintentando...");
-                                                        // Fallback de emergencia por si el cálculo falló
-                                                        window.bot.makeMove(); 
-                                                }
-                                        }, 100); // 100ms de "tiempo de reacción"
-                                }, 50);
+                                window.bot.cancelPlanning();
+                                window.bot.makeMove();
                         }
                 };
 
@@ -1846,18 +1815,18 @@ this.makeMove = function() {
         console.log("[BOT] makeMove() called. enabled=", self.enabled, "isThinking=", self.isThinking, "bestBotMove=", self.bestBotMove);
         if (!self.enabled) {
                 console.warn("[BOT][ABORT] makeMove(): bot not enabled");
-                return;
+                return false;
         }
-        if (self.tetris.paused) { return; }
+        if (self.tetris.paused) { return false; }
         var actorPuzzle = self.tetris.puzzle;
-        if (!actorPuzzle || !actorPuzzle.isRunning()) { return; }
+        if (!actorPuzzle || !actorPuzzle.isRunning()) { return false; }
         if (self.isThinking) {
                 console.warn("[BOT][ABORT] makeMove(): still thinking");
-                return;
+                return false;
         }
         if (self.bestBotMove) {
                 console.warn("[BOT][ABORT] makeMove(): move already pending");
-                return;
+                return false;
         }
 
         self.isThinking = true;
@@ -1869,16 +1838,18 @@ this.makeMove = function() {
         // (Nota: Esto es intensivo, podría ir en un WebWorker en el futuro)
         var bestMove = self.calculateBestMove();
 
+        self.isThinking = false;
+        self.clearGhostPreview();
+
         // 2. Ejecutar la jugada visualmente
-        if (bestMove) {
-                self.bestBotMove = bestMove;
-                self.renderGhostPreview(bestMove);
-        } else {
-                self.clearGhostPreview();
+        if (!bestMove) {
+                return false;
         }
 
-        // Si no hay movimiento válido (game over inminente) o el cálculo terminó, liberar
-        self.isThinking = false;
+        self.bestBotMove = bestMove;
+        self.renderGhostPreview(bestMove);
+        self.executeStoredMove();
+        return true;
                         };
 
 // --- EJECUCIÓN DIFERIDA TRAS EL LOCK HUMANO ---
