@@ -133,12 +133,15 @@ function Tetris()
 		// Co-op eliminado.
 	};
 
-	this.updateGameMode = function(modeState) {
-		console.info('[SWAP] Cambio de modo solicitado', modeState);
-		self.inputLocked = true;
-		if (self.puzzle) self.puzzle.clearTimers();
-		
-		self.applyModeRules(modeState);
+        this.updateGameMode = function(modeState) {
+                console.info('[SWAP] Cambio de modo solicitado', modeState);
+                self.inputLocked = true;
+                if (self.puzzle) self.puzzle.clearTimers();
+
+                self.applyModeRules(modeState);
+
+                // Reaplicar control humano si el modo cambia a HUMANO
+                self.resyncControlState();
 		
 		setTimeout(function() { self.inputLocked = false; }, 150);
 	};
@@ -200,10 +203,8 @@ function Tetris()
                         if (!self.puzzle) return;
 
                         console.log("[IA] Devolviendo control.");
-                        self.puzzle.isHumanControlled = true;
                         self.controlState = 'HUMAN';
-
-                        self.puzzle.resumeGravity(true);
+                        self.resyncControlState();
                 };
 
         this.transferControlToIA = function() {
@@ -312,10 +313,10 @@ function Tetris()
 
 	// --- CORE GAME LOOP ---
 
-	this.start = function() {
-		if (self.puzzle && !confirm('¿Nueva partida?')) return;
-		self.updateResponsiveUnit();
-		self.reset();
+        this.start = function() {
+                if (self.puzzle && !confirm('¿Nueva partida?')) return;
+                self.updateResponsiveUnit();
+                self.reset();
 
 		if (window.bot) {
 			window.bot.enabled = !!self.isIAAssist; // Mantener estado si ya estaba activo
@@ -326,22 +327,37 @@ function Tetris()
 		document.getElementById("tetris-nextpuzzle").style.display = "block";
 		document.getElementById("tetris-keys").style.display = "none";
 		
-		self.area = new Area(self.unit, self.areaX, self.areaY, "tetris-area");
-		
-		// CREACIÓN ÚNICA DE PIEZA
-		self.puzzle = new Puzzle(self, self.area, true); 
+                self.area = new Area(self.unit, self.areaX, self.areaY, "tetris-area");
+
+                // CREACIÓN ÚNICA DE PIEZA
+                self.puzzle = new Puzzle(self, self.area, true);
+
+                // Asegurar que la primera pieza responda al jugador por defecto
+                self.resyncControlState();
 		
 		// Si arrancamos directo en modo IA
 		if (self.isIAAssist) {
 			self.enableIAAssist();
 		}
 
-		if (self.puzzle.mayPlace()) {
-			self.puzzle.place();
-		} else {
-			self.gameOver();
-		}
-	};
+                if (self.puzzle.mayPlace()) {
+                        self.puzzle.place();
+                        self.resyncControlState();
+                } else {
+                        self.gameOver();
+                }
+        };
+
+        this.resyncControlState = function() {
+                if (!self.puzzle) return;
+
+                var shouldBeHuman = (self.controlState === 'HUMAN');
+                self.puzzle.isHumanControlled = shouldBeHuman;
+
+                if (shouldBeHuman) {
+                        self.puzzle.resumeGravity(true);
+                }
+        };
 
         this.reset = function() {
                 if (self.puzzle) {
@@ -584,10 +600,8 @@ function Tetris()
 		};
 
                 this.place = function() {
-                // HEREDAR CONTROL IA A LA NUEVA PIEZA
-                if (this.tetris.controlState === 'IA') {
-                        this.isHumanControlled = false;
-                }
+                        // Sincronizar control con el estado actual del juego
+                        this.isHumanControlled = (this.tetris.controlState === 'HUMAN');
 
                         // Stats
                         this.tetris.stats.setPuzzles(this.tetris.stats.getPuzzles() + 1);
