@@ -193,34 +193,10 @@ function Tetris()
 
         this.enableIAAssist = function() {
                 if (!self.puzzle || self.puzzle.isStopped()) return;
-                if (!window.bot || !window.bot.enabled) {
-                        console.warn('[IA] Bot no disponible');
-                        return;
-                }
+                if (!window.bot || !window.bot.enabled) return;
 
-                console.log("[IA] Tomando control.");
                 self.transferControlToIA();
-
                 self.updateControlStyles(self.puzzle);
-
-                if (window.bot) {
-                        window.bot.enabled = true;
-                        window.bot.currentPuzzle = self.puzzle;
-                        window.bot.isThinking = false;
-
-                        // WATCHDOG: Asegurar que el bot no se duerma
-                        if (window.bot.assistInterval) clearInterval(window.bot.assistInterval);
-
-                        window.bot.assistInterval = setInterval(function() {
-                                if (self.isIAAssist && self.puzzle && self.puzzle.isRunning() && !self.paused) {
-                                        if (!window.bot.isThinking && !window.bot.bestBotMove && !self.puzzle.isHumanControlled) {
-                                                console.warn("[WATCHDOG] Bot inactivo detectado. Reactivando...");
-                                                window.bot.makeMove();
-                                                window.bot.executeStoredMove();
-                                        }
-                                }
-                        }, 1500); // Revisar cada 1.5 segundos
-                }
         };
 
         this.disableIAAssist = function() {
@@ -392,17 +368,17 @@ function Tetris()
         };
 
 	this.pause = function() {
-		if (!self.puzzle) return;
-		if (self.paused) {
-			// Resume
-			self.puzzle.running = true;
-			if (self.puzzle.isHumanControlled) {
-				self.puzzle.fallDownID = setTimeout(self.puzzle.fallDown, self.puzzle.speed);
-			} else if (self.isIAAssist && window.bot) {
-				// Reactivar bot si estaba pausado
-				window.bot.makeMove();
-				window.bot.executeStoredMove();
-			}
+                if (!self.puzzle) return;
+                if (self.paused) {
+                        // Resume
+                        self.puzzle.running = true;
+                        if (self.puzzle.isHumanControlled) {
+                                self.puzzle.resumeGravity(true);
+                        } else if (self.isIAAssist && window.bot) {
+                                // Reactivar bot si estaba pausado
+                                window.bot.makeMove();
+                                window.bot.executeStoredMove();
+                        }
 			document.getElementById('tetris-pause').style.display = 'block';
 			document.getElementById('tetris-resume').style.display = 'none';
 			self.stats.timerId = setInterval(self.stats.incTime, 1000);
@@ -505,9 +481,9 @@ function Tetris()
 		var self = this;
 		this.tetris = tetris;
 		this.area = area;
-		this.isHumanControlled = isHumanControlled;
+                this.isHumanControlled = isHumanControlled;
 
-        this.fallDownID = null;
+        this.fallDownID;
         this.forceMoveDownID = null;
         this.forceMoveDownDelay = 30;
         this.type = null;
@@ -529,21 +505,28 @@ function Tetris()
 			[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]]
 		];
 
-		this.clearTimers = function() {
-			if (this.fallDownID) { clearTimeout(this.fallDownID); this.fallDownID = null; }
-			if (this.forceMoveDownID) { clearTimeout(this.forceMoveDownID); this.forceMoveDownID = null; }
-		};
+                this.clearFallDownTimer = function() {
+                        if (this.fallDownID) {
+                                clearTimeout(this.fallDownID);
+                                delete this.fallDownID;
+                        }
+                };
 
-		this.suspendGravity = function() {
-			if (this.fallDownID) { clearTimeout(this.fallDownID); this.fallDownID = null; }
-		};
+                this.clearTimers = function() {
+                        this.clearFallDownTimer();
+                        if (this.forceMoveDownID) { clearTimeout(this.forceMoveDownID); this.forceMoveDownID = null; }
+                };
+
+                this.suspendGravity = function() {
+                        this.clearFallDownTimer();
+                };
 
 		this.resumeGravity = function(restart) {
-			if (restart && this.running && !this.stopped && this.isHumanControlled) {
-				if (this.fallDownID) clearTimeout(this.fallDownID);
-				this.fallDownID = setTimeout(this.fallDown, this.speed);
-			}
-		};
+                        if (restart && this.running && !this.stopped && this.isHumanControlled) {
+                                this.clearFallDownTimer();
+                                this.fallDownID = setTimeout(this.fallDown, this.speed);
+                        }
+                };
 
 		this.reset = function() {
 			this.clearTimers();
@@ -641,15 +624,12 @@ function Tetris()
 
                         // --- LÓGICA CRÍTICA DE CAÍDA ---
                         // Solo activar gravedad si es humano.
-                        // Si es Bot, NO activamos gravedad (fallDownID = null).
+                        this.clearFallDownTimer();
                         if (this.isHumanControlled) {
                                 this.fallDownID = setTimeout(this.fallDown, this.speed);
                         } else if (this.tetris.controlState === 'IA' && window.bot) {
                                 window.bot.makeMove();
                                 botMoveTriggered = true;
-                                this.fallDownID = null;
-                        } else {
-                                this.fallDownID = null;
                         }
 
 			// Renderizar siguiente pieza
