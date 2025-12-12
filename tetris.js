@@ -143,9 +143,12 @@ function Tetris()
 
                 // Reaplicar control humano si el modo cambia a HUMANO
                 self.resyncControlState();
-		
-		setTimeout(function() { self.inputLocked = false; }, 150);
-	};
+
+                setTimeout(function() {
+                        self.inputLocked = false;
+                        self.resyncControlState();
+                }, 150);
+        };
 
 	this.applyModeRules = function(modeState) {
 		var requestedIA = !!(modeState && modeState.ia);
@@ -213,6 +216,7 @@ function Tetris()
                                 self.botReadyTimeout = null;
                         }
                         self.controlState = 'HUMAN';
+                        self.inputLocked = false;
                         self.resyncControlState();
                 };
 
@@ -224,6 +228,7 @@ function Tetris()
 
                 console.log('[IA] Iniciando transferencia de control a bot.');
                 self.controlState = 'TRANSITIONING_TO_IA';
+                self.inputLocked = true;
 
                 if (self.puzzle) self.puzzle.suspendGravity();
 
@@ -243,6 +248,7 @@ function Tetris()
                                 self.botReadyInterval = null;
                         }
                         self.controlState = 'HUMAN';
+                        self.inputLocked = false;
                         if (self.puzzle) {
                                 self.puzzle.isHumanControlled = true;
                                 self.puzzle.resumeGravity(true);
@@ -260,6 +266,7 @@ function Tetris()
 
                                 console.log('[IA] Bot listo. Transferencia completada.');
                                 self.controlState = 'IA';
+                                self.inputLocked = true;
                                 if (self.puzzle) {
                                         self.puzzle.isHumanControlled = false;
                                 }
@@ -361,18 +368,24 @@ function Tetris()
                 if (!self.puzzle) return;
 
                 var shouldBeHuman = (self.controlState === 'HUMAN');
+                var canRun = shouldBeHuman && !self.inputLocked && !self.paused;
+
                 self.puzzle.isHumanControlled = shouldBeHuman;
 
-                if (shouldBeHuman) {
+                if (canRun) {
                         self.puzzle.resumeGravity(true);
+                } else {
+                        self.puzzle.suspendGravity();
                 }
+
+                self.updateControlStyles(self.puzzle);
         };
 
-        this.reset = function() {
-                if (self.puzzle) {
-                        self.puzzle.destroy();
-                        self.puzzle = null;
-                }
+                this.reset = function() {
+                        if (self.puzzle) {
+                                self.puzzle.destroy();
+                                self.puzzle = null;
+                        }
                 if (self.area) {
                         self.area.destroy();
                         self.area = null;
@@ -380,11 +393,12 @@ function Tetris()
                 document.getElementById("tetris-gameover").style.display = "none";
                 document.getElementById("tetris-nextpuzzle").style.display = "none";
                 document.getElementById("tetris-keys").style.display = "block";
-                self.stats.reset();
-                self.paused = false;
-                self.controlState = 'HUMAN';
-                document.getElementById('tetris-pause').style.display = 'block';
-                document.getElementById('tetris-resume').style.display = 'none';
+                        self.stats.reset();
+                        self.paused = false;
+                        self.controlState = 'HUMAN';
+                        self.inputLocked = false;
+                        document.getElementById('tetris-pause').style.display = 'block';
+                        document.getElementById('tetris-resume').style.display = 'none';
         };
 
         this.pause = function() {
@@ -414,9 +428,9 @@ function Tetris()
 		}
 	};
 
-	this.gameOver = function() {
-		self.stats.stop();
-		if (self.puzzle) self.puzzle.stop();
+        this.gameOver = function() {
+                self.stats.stop();
+                if (self.puzzle) self.puzzle.stop();
 		
 		document.getElementById("tetris-nextpuzzle").style.display = "none";
 		document.getElementById("tetris-gameover").style.display = "block";
@@ -431,22 +445,22 @@ function Tetris()
 
 	// --- INPUTS UNIFICADOS ---
 
-	this.up = function() {
-		if (self.inputLocked || !self.puzzle || !self.puzzle.isHumanControlled) return;
-		if (self.puzzle.mayRotate()) {
-			self.puzzle.rotate();
-			self.stats.setActions(self.stats.getActions() + 1);
-		}
-	};
+        this.up = function() {
+                if (!self.canHumanControlPiece('UP')) return;
+                if (self.puzzle.mayRotate()) {
+                        self.puzzle.rotate();
+                        self.stats.setActions(self.stats.getActions() + 1);
+                }
+        };
 
-	this.down = function() {
-		if (self.inputLocked || !self.puzzle || !self.puzzle.isHumanControlled) return;
-		if (self.puzzle.mayMoveDown()) {
-			self.stats.setScore(self.stats.getScore() + 5 + self.stats.getLevel());
-			self.stats.setActions(self.stats.getActions() + 1);
-			self.puzzle.moveDown();
-		}
-	};
+        this.down = function() {
+                if (!self.canHumanControlPiece('DOWN')) return;
+                if (self.puzzle.mayMoveDown()) {
+                        self.stats.setScore(self.stats.getScore() + 5 + self.stats.getLevel());
+                        self.stats.setActions(self.stats.getActions() + 1);
+                        self.puzzle.moveDown();
+                }
+        };
 
 	this.left = function() {
 		// [DEBUG] 3. Intento de movimiento lógico
@@ -459,14 +473,7 @@ function Tetris()
 			isStopped: self.puzzle ? self.puzzle.isStopped() : "N/A"
 		});
 
-                if (self.inputLocked || !self.puzzle || !self.puzzle.isHumanControlled) {
-                        console.warn("[CONTROL] Movimiento RECHAZADO por guardias.");
-                        return;
-                }
-                if (!self.puzzle.isRunning() || self.puzzle.isStopped()) {
-			console.warn("[CONTROL] Movimiento RECHAZADO: pieza detenida.");
-			return;
-		}
+                if (!self.canHumanControlPiece('LEFT')) return;
 
                 console.log("[CONTROL] Movimiento ACEPTADO. Ejecutando...");
                 if (self.puzzle.mayMoveLeft()) {
@@ -475,19 +482,42 @@ function Tetris()
                 }
         };
 
-	this.right = function() {
-		if (self.inputLocked || !self.puzzle || !self.puzzle.isHumanControlled) return;
-		if (self.puzzle.mayMoveRight()) {
-			self.puzzle.moveRight();
-			self.stats.setActions(self.stats.getActions() + 1);
-		}
-	};
+        this.right = function() {
+                if (!self.canHumanControlPiece('RIGHT')) return;
+                if (self.puzzle.mayMoveRight()) {
+                        self.puzzle.moveRight();
+                        self.stats.setActions(self.stats.getActions() + 1);
+                }
+        };
 
-	this.space = function() {
-		if (self.inputLocked || !self.puzzle || !self.puzzle.isHumanControlled) return;
-		self.puzzle.stop();
-		self.puzzle.forceMoveDown();
-	};
+        this.space = function() {
+                if (!self.canHumanControlPiece('SPACE')) return;
+                self.puzzle.stop();
+                self.puzzle.forceMoveDown();
+        };
+
+        this.canHumanControlPiece = function(actionLabel) {
+                var allowed = true;
+                var snapshot = {
+                        inputLocked: self.inputLocked,
+                        controlState: self.controlState,
+                        paused: self.paused,
+                        puzzleExists: !!self.puzzle,
+                        isHumanControlled: self.puzzle ? self.puzzle.isHumanControlled : 'N/A',
+                        isRunning: self.puzzle && typeof self.puzzle.isRunning === 'function' ? self.puzzle.isRunning() : 'N/A',
+                        isStopped: self.puzzle && typeof self.puzzle.isStopped === 'function' ? self.puzzle.isStopped() : 'N/A'
+                };
+
+                if (self.inputLocked || self.controlState !== 'HUMAN' || self.paused) allowed = false;
+                if (!self.puzzle || !self.puzzle.isHumanControlled) allowed = false;
+                if (self.puzzle && (!self.puzzle.isRunning() || self.puzzle.isStopped())) allowed = false;
+
+                if (!allowed && actionLabel) {
+                        console.warn('[CONTROL] Acción bloqueada: ' + actionLabel, snapshot);
+                }
+
+                return allowed;
+        };
 
 	// ... (Código de Window, Keyboard, Stats, Area, Highscores, Cookie se mantienen igual) ...
 	// ... (Copiar clases auxiliares originales aquí: Window, Keyboard, Stats, Area, Highscores, Cookie) ...
@@ -856,13 +886,40 @@ function Tetris()
                         self.keyboard = new Keyboard();
                 }
 
-                self.keyboard.set(self.keyboard.left, self.left);
-                self.keyboard.set(self.keyboard.right, self.right);
-                self.keyboard.set(self.keyboard.up, self.up);
-                self.keyboard.set(self.keyboard.down, self.down);
-                self.keyboard.set(self.keyboard.space, self.space);
-                self.keyboard.set(self.keyboard.p, self.pause);
-                self.keyboard.set(self.keyboard.n, self.start);
+                var canControl = self.controlState === 'HUMAN' && !self.inputLocked;
+                self.keyboard.tetris = self;
+
+                var bindAction = function(key, handler, label) {
+                        self.keyboard.set(key, function() {
+                                if (!self.canHumanControlPiece(label)) return;
+                                handler();
+                        });
+                };
+
+                bindAction(self.keyboard.left, self.left, 'LEFT');
+                bindAction(self.keyboard.right, self.right, 'RIGHT');
+                bindAction(self.keyboard.up, self.up, 'UP');
+                bindAction(self.keyboard.down, self.down, 'DOWN');
+                bindAction(self.keyboard.space, self.space, 'SPACE');
+
+                self.keyboard.set(self.keyboard.p, function() {
+                        if (self.inputLocked) {
+                                console.warn('[CONTROL] Acción de pausa bloqueada mientras inputLocked está activo.');
+                                return;
+                        }
+                        self.pause();
+                });
+                self.keyboard.set(self.keyboard.n, function() {
+                        if (self.inputLocked) {
+                                console.warn('[CONTROL] Acción de nuevo juego bloqueada mientras inputLocked está activo.');
+                                return;
+                        }
+                        self.start();
+                });
+
+                if (!canControl) {
+                        console.log("[CONTROL] Los controles están bloqueados.");
+                }
         };
 
         this.bindKeyboardControls();
