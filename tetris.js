@@ -10,9 +10,10 @@ function Tetris()
 {
 	var self = this;
 
-	this.stats = new Stats();
-	this.puzzle = null; // ARQUITECTURA UNIFICADA: Una sola pieza activa
-	this.area = null;
+        this.stats = new Stats();
+        this.puzzle = null; // ARQUITECTURA UNIFICADA: Una sola pieza activa
+        this.area = null;
+        this.keyboard = new Keyboard();
 
 	this.unit  = 20;
 	this.areaX = 12;
@@ -850,13 +851,29 @@ function Tetris()
 		};
 	}
 
-	// --- CLASES AUXILIARES (Window, Keyboard, Stats, Area, Highscores, Cookie) ---
-	// Debes mantener las definiciones originales de estas clases al final del archivo
-	// o copiarlas del archivo original si las borraste. Son dependencias necesarias.
+        this.bindKeyboardControls = function() {
+                if (!self.keyboard) {
+                        self.keyboard = new Keyboard();
+                }
+
+                self.keyboard.set(self.keyboard.left, self.left);
+                self.keyboard.set(self.keyboard.right, self.right);
+                self.keyboard.set(self.keyboard.up, self.up);
+                self.keyboard.set(self.keyboard.down, self.down);
+                self.keyboard.set(self.keyboard.space, self.space);
+                self.keyboard.set(self.keyboard.p, self.pause);
+                self.keyboard.set(self.keyboard.n, self.start);
+        };
+
+        this.bindKeyboardControls();
+
+        // --- CLASES AUXILIARES (Window, Keyboard, Stats, Area, Highscores, Cookie) ---
+        // Debes mantener las definiciones originales de estas clases al final del archivo
+        // o copiarlas del archivo original si las borraste. Son dependencias necesarias.
     // ... [Aquí iría el código de Window, Keyboard, etc. sin cambios] ...
     // PARA COMPLETAR: Copia las funciones auxiliares del archivo original aquí abajo.
     // (Window, Keyboard, Stats, Area, Highscores, Cookie)
-    
+
     // ... [TetrisBot debe actualizarse para usar this.tetris.puzzle] ...
 }
 
@@ -2550,7 +2567,14 @@ document.addEventListener('DOMContentLoaded', function() {
     window.bot = new TetrisBot(window.tetris);
     console.log('[INIT] ✅ Bot IA instanciado:', window.bot);
     
-    // 3. CONEXIÓN CRÍTICA: Botones del HTML con funciones JS
+    // 3. Inicialización del teclado humano
+    if (window.tetris && window.tetris.keyboard) {
+        window.addEventListener('keydown', function(e) {
+            window.tetris.keyboard.event(e);
+        });
+    }
+
+    // 4. CONEXIÓN CRÍTICA: Botones del HTML con funciones JS
     
     // 🔘 Botón PLAY (▶ Play)
     var playBtn = document.getElementById('playBtn');
@@ -2639,7 +2663,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // 4. CONFIGURACIÓN RESPONSIVA
+    // 5. CONFIGURACIÓN RESPONSIVA
     setTimeout(function() {
         if (window.tetris.updateResponsiveUnit) {
             window.tetris.updateResponsiveUnit();
@@ -2652,7 +2676,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // 5. INICIALIZACIÓN VISUAL
+    // 6. INICIALIZACIÓN VISUAL
     // Actualizar etiqueta del bot si existe
     if (window.tetris.updateBotToggleLabel) {
         window.tetris.updateBotToggleLabel();
