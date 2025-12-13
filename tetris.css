@@ -300,15 +300,15 @@ button:active {
         width: calc(var(--unit) - 1px);
         height: calc(var(--unit) - 1px);
         border: 1px solid rgba(0, 0, 0, 0.3);
-        background: #f5a623;
+        background: #0B2A4A;
 }
 
-.block1 { background: #7dd5ff; }
-.block2 { background: #f7ff7d; }
-.block3 { background: #ff9edb; }
-.block4 { background: #7dffb2; }
-.block5 { background: #ffbe7d; }
-.block6 { background: #ffa07d; }
+.block1 { background: #B00020; }
+.block2 { background: #8A4FFF; }
+.block3 { background: #7A4A1E; }
+.block4 { background: #1F6F43; }
+.block5 { background: #5A5A5A; }
+.block6 { background: #F2F2F2; }
 
 /* Previsualización fantasma del bot */
 .bot-ghost {

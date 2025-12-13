@@ -15,9 +15,12 @@ function Tetris()
         this.area = null;
         this.keyboard = new Keyboard();
 
-	this.unit  = 20;
-	this.areaX = 12;
-	this.areaY = 22;
+        this.unit  = 20;
+        this.areaX = 12;
+        this.areaY = 22;
+
+        // Bandeja visual para mostrar la pieza final antes del Game Over
+        this.pendingBlockedGameOver = false;
 
 	// Estados del control
         this.controlState = 'HUMAN'; // 'HUMAN', 'TRANSITIONING_TO_IA', 'IA'
@@ -360,7 +363,7 @@ function Tetris()
                         self.puzzle.place();
                         self.resyncControlState();
                 } else {
-                        self.gameOver();
+                        self.showBlockedGameOver();
                 }
         };
 
@@ -397,6 +400,7 @@ function Tetris()
                         self.paused = false;
                         self.controlState = 'HUMAN';
                         self.inputLocked = false;
+                        self.pendingBlockedGameOver = false;
                         document.getElementById('tetris-pause').style.display = 'block';
                         document.getElementById('tetris-resume').style.display = 'none';
         };
@@ -416,17 +420,36 @@ function Tetris()
                         document.getElementById('tetris-resume').style.display = 'none';
                         self.stats.timerId = setInterval(self.stats.incTime, 1000);
                         self.paused = false;
-		} else {
-			// Pause
-			if (!self.puzzle.isRunning()) return;
-			self.puzzle.clearTimers();
-			document.getElementById('tetris-pause').style.display = 'none';
+                } else {
+                        // Pause
+                        if (!self.puzzle.isRunning()) return;
+                        self.puzzle.clearTimers();
+                        document.getElementById('tetris-pause').style.display = 'none';
 			document.getElementById('tetris-resume').style.display = 'block';
 			clearTimeout(self.stats.timerId);
 			self.paused = true;
-			self.puzzle.running = false;
-		}
-	};
+                        self.puzzle.running = false;
+                }
+        };
+
+        this.showBlockedGameOver = function() {
+                if (self.pendingBlockedGameOver) return;
+                self.pendingBlockedGameOver = true;
+
+                if (self.puzzle && typeof self.puzzle.renderBlockedSpawn === 'function') {
+                        self.puzzle.renderBlockedSpawn();
+                }
+
+                var triggerGameOver = function() { self.gameOver(); };
+
+                if (typeof requestAnimationFrame === 'function') {
+                        requestAnimationFrame(function() {
+                                requestAnimationFrame(triggerGameOver);
+                        });
+                } else {
+                        setTimeout(triggerGameOver, 30);
+                }
+        };
 
         this.gameOver = function() {
                 self.stats.stop();
@@ -717,8 +740,40 @@ function Tetris()
                         }
                 };
 
-		this.destroy = function() {
-			this.clearTimers();
+                this.renderBlockedSpawn = function() {
+                        var puzzle = this.puzzles[this.type];
+                        var areaStartX = parseInt((this.area.x - puzzle[0].length) / 2);
+                        var areaStartY = 1;
+                        var lineFound = false;
+                        var lines = 0;
+
+                        this.x = areaStartX;
+                        this.y = 1;
+                        this.board = this.createEmptyPuzzle(puzzle.length, puzzle[0].length);
+
+                        for (var y = puzzle.length - 1; y >= 0; y--) {
+                                for (var x = 0; x < puzzle[y].length; x++) {
+                                        if (puzzle[y][x]) {
+                                                lineFound = true;
+                                                var el = document.createElement("div");
+                                                el.className = "block" + this.type;
+                                                el.style.left = (areaStartX + x) * this.area.unit + "px";
+                                                el.style.top = (areaStartY - lines) * this.area.unit + "px";
+                                                this.area.el.appendChild(el);
+                                                this.board[y][x] = el;
+                                                this.elements.push(el);
+                                        }
+                                }
+                                if (lines) this.y--;
+                                if (lineFound) lines++;
+                        }
+
+                        this.running = false;
+                        this.stopped = true;
+                };
+
+                this.destroy = function() {
+                        this.clearTimers();
 			// Limpiar elementos visuales
 			for (var i = 0; i < this.elements.length; i++) {
 				if (this.elements[i].parentNode) this.elements[i].parentNode.removeChild(this.elements[i]);
@@ -762,12 +817,12 @@ function Tetris()
 						self.tetris.stats.setLines(self.tetris.stats.getLines() + lines);
 						self.tetris.stats.setScore(self.tetris.stats.getScore() + (1000 * self.tetris.stats.getLevel() * lines));
 					}
-					self.reset();
-					if (self.mayPlace()) self.place();
-					else self.tetris.gameOver();
-				}
-			}
-		};
+                                        self.reset();
+                                        if (self.mayPlace()) self.place();
+                                        else self.tetris.showBlockedGameOver();
+                                }
+                        }
+                };
 
         this.forceMoveDown = function() {
             if (!self.running || self.stopped) return;
@@ -789,7 +844,7 @@ function Tetris()
                 }
                 self.reset();
                 if (self.mayPlace()) self.place();
-                else self.tetris.gameOver();
+                else self.tetris.showBlockedGameOver();
             }
         };
 
