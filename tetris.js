@@ -147,7 +147,7 @@ function Tetris()
                 // Reaplicar control humano si el modo cambia a HUMANO
                 self.resyncControlState();
 
-                setTimeout(function() {
+                setTimeout(() => {
                         self.inputLocked = false;
                         self.resyncControlState();
                 }, 150);
@@ -244,7 +244,7 @@ function Tetris()
                         self.botReadyTimeout = null;
                 }
 
-                self.botReadyTimeout = setTimeout(function() {
+                self.botReadyTimeout = setTimeout(() => {
                         console.error('[IA][FAST-FAIL] Bot no se declaró listo dentro del tiempo de espera. Revirtiendo control.');
                         if (self.botReadyInterval) {
                                 clearInterval(self.botReadyInterval);
@@ -258,7 +258,7 @@ function Tetris()
                         }
                 }, 2500);
 
-                self.botReadyInterval = setInterval(function() {
+                self.botReadyInterval = setInterval(() => {
                         if (window.bot && window.bot.enabled && !window.bot.isThinking) {
                                 clearInterval(self.botReadyInterval);
                                 self.botReadyInterval = null;
@@ -425,7 +425,7 @@ function Tetris()
                         document.getElementById('tetris-pause').style.display = 'block';
                         document.getElementById('tetris-resume').style.display = 'none';
                         if (!self.stats.timerId) {
-                                self.stats.timerId = setInterval(self.stats.incTime, 1000);
+                                self.stats.timerId = setInterval(() => self.stats.incTime(), 1000);
                         }
                         self.paused = false;
                 } else {
@@ -456,7 +456,7 @@ function Tetris()
                                 requestAnimationFrame(triggerGameOver);
                         });
                 } else {
-                        setTimeout(triggerGameOver, 30);
+                        setTimeout(() => triggerGameOver(), 30);
                 }
         };
 
@@ -705,11 +705,11 @@ function Tetris()
 			this.y = 1;
 			this.board = this.createEmptyPuzzle(puzzle.length, puzzle[0].length);
 
-			for (var y = puzzle.length - 1; y >= 0; y--) {
-				for (var x = 0; x < puzzle[y].length; x++) {
-					if (puzzle[y][x]) {
-						lineFound = true;
-						var el = document.createElement("div");
+                          for (var y = puzzle.length - 1; y >= 0; y--) {
+                                  for (var x = 0; x < puzzle[y].length; x++) {
+                                          if (puzzle[y][x]) {
+                                                  lineFound = true;
+                                                  var el = document.createElement("div");
 						el.className = "block" + this.type;
 						el.style.left = (areaStartX + x) * this.area.unit + "px";
 						el.style.top = (areaStartY - lines) * this.area.unit + "px";
@@ -717,34 +717,45 @@ function Tetris()
 						this.board[y][x] = el;
 						this.elements.push(el);
 					}
-				}
-				if (lines) this.y--;
-				if (lineFound) lines++;
-			}
-			
-                        this.running = true;
+                                  }
+                                  if (lines) this.y--;
+                                  if (lineFound) lines++;
+                          }
 
-                        // --- LÓGICA CRÍTICA DE CAÍDA ---
-                        // Solo activar gravedad si es humano.
+                          console.info('[RENDER] Pieza activa renderizada en el área', {
+                                  type: this.type,
+                                  blocks: this.elements.length,
+                                  origin: { x: this.x, y: this.y }
+                          });
+
+                          this.running = true;
+
+                          // --- LÓGICA CRÍTICA DE CAÍDA ---
+                          // Solo activar gravedad si es humano.
                         this.clearFallDownTimer();
                         if (this.isHumanControlled) {
-                                this.fallDownID = setTimeout(this.fallDown, this.speed);
+                        this.fallDownID = setTimeout(() => this.fallDown(), this.speed);
                         }
 
 			// Renderizar siguiente pieza
-			var nextPuzzle = this.puzzles[this.nextType];
-			for (var y = 0; y < nextPuzzle.length; y++) {
-				for (var x = 0; x < nextPuzzle[y].length; x++) {
-					if (nextPuzzle[y][x]) {
-						var el = document.createElement("div");
+                          var nextPuzzle = this.puzzles[this.nextType];
+                          for (var y = 0; y < nextPuzzle.length; y++) {
+                                  for (var x = 0; x < nextPuzzle[y].length; x++) {
+                                          if (nextPuzzle[y][x]) {
+                                                  var el = document.createElement("div");
 						el.className = "block" + this.nextType;
 						el.style.left = (x * this.area.unit) + "px";
 						el.style.top = (y * this.area.unit) + "px";
 						document.getElementById("tetris-nextpuzzle").appendChild(el);
-						this.nextElements.push(el);
-					}
-				}
-			}
+                                                  this.nextElements.push(el);
+                                          }
+                                  }
+                          }
+
+                          console.info('[RENDER] Próxima pieza renderizada en bandeja', {
+                                  type: this.nextType,
+                                  blocks: this.nextElements.length
+                          });
 
                         this.tetris.updateControlStyles(this);
 
@@ -822,7 +833,7 @@ function Tetris()
 			if (self.running) {
 				if (self.mayMoveDown()) {
 					self.moveDown();
-					self.fallDownID = setTimeout(self.fallDown, self.speed);
+                                    self.fallDownID = setTimeout(() => self.fallDown(), self.speed);
 				} else {
 					// Lock
 					for (var i = 0; i < self.elements.length; i++) {
@@ -847,7 +858,7 @@ function Tetris()
                 self.tetris.stats.setScore(self.tetris.stats.getScore() + 5 + self.tetris.stats.getLevel());
                 self.tetris.stats.setActions(self.tetris.stats.getActions() + 1);
                 self.moveDown();
-                self.forceMoveDownID = setTimeout(self.forceMoveDown, self.forceMoveDownDelay || 30);
+                self.forceMoveDownID = setTimeout(() => self.forceMoveDown(), self.forceMoveDownDelay || 30);
             } else {
                 // Lock
                 for (var i = 0; i < self.elements.length; i++) {
@@ -1220,8 +1231,8 @@ function Window(id)
 		 */
 		this.start = function()
 		{
-			this.reset();
-			this.timerId = setInterval(this.incTime, 1000);
+                        this.reset();
+                        this.timerId = setInterval(() => this.incTime(), 1000);
 		};
 
 		/**
@@ -2132,7 +2143,7 @@ this.executeMoveSmoothly = function(move) {
                         else if (action === 'left' && actor.mayMoveLeft()) { actor.moveLeft(); }
                         else if (action === 'right' && actor.mayMoveRight()) { actor.moveRight(); }
 
-                        setTimeout(playStep, 50);
+                        setTimeout(() => playStep(), 50);
                         return;
                 }
 
@@ -2148,7 +2159,7 @@ this.executeMoveSmoothly = function(move) {
                 var atTargetY = (typeof targetY === 'number') && actor.getY() >= targetY;
                 if (!atTargetY && actor.mayMoveDown()) {
                         actor.moveDown();
-                        setTimeout(animateDrop, 50);
+                        setTimeout(() => animateDrop(), 50);
                         return;
                 }
 
@@ -2720,7 +2731,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // 5. CONFIGURACIÓN RESPONSIVA
-    setTimeout(function() {
+    setTimeout(() => {
         if (window.tetris.updateResponsiveUnit) {
             window.tetris.updateResponsiveUnit();
         }
