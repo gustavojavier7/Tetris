@@ -1693,6 +1693,7 @@ function TetrisBot(tetrisInstance) {
         this.predictedBoard = null; // Tablero proyectado (dual-state)
         this.bestBotMove = null; // Movimiento óptimo pendiente de ejecutar
         this.ghostElements = []; // Previsualización de la jugada del bot
+        this.currentBotStrategy = 'BALANCED';
 
         // --- MODOS DE JUEGO (FAST-FAIL EN VALIDACIONES) ---
         const GamePlayMode = {
@@ -1846,6 +1847,17 @@ function calculateMaxHeightRatio(grid) {
         }
 
         return highest / totalRows;
+}
+
+function getEffectiveBotStrategy(state) {
+        const h = state.maxHeightRatio;
+        const occ = state.occupiedCellsRatio;
+
+        if (h > 0.72 || occ > 0.85) return 'SURVIVAL';
+        if (h < 0.45 && occ < 0.60) return 'TETRIS_BUILDER';
+        if (h >= 0.45 && h <= 0.65 && occ < 0.75) return 'PRO_ATTACK';
+
+        return 'BALANCED';
 }
 
 function getActiveMode(grid) {
@@ -2168,6 +2180,7 @@ this.evaluateGrid = function(grid, linesCleared, skipLookahead) {
     var TOTAL_ROWS = self.tetris.areaY; // 22
     var TOTAL_COLS = self.tetris.areaX; // 12
     var MAX_RISK_CELLS = TOTAL_ROWS * TOTAL_COLS; // 264
+    var MAX_CELLS = TOTAL_ROWS * TOTAL_COLS;
 
     var modeToUse = getActiveMode(grid);
     var maxHeightRatio = 0;
@@ -2242,6 +2255,21 @@ this.evaluateGrid = function(grid, linesCleared, skipLookahead) {
     // Riesgo principal basado en la altura máxima de columna (no en ocupación).
     maxHeightRatio = maxHeight / TOTAL_ROWS;
     var riskLocalBase = maxHeightRatio * 100;
+
+    var botState = {
+        maxHeightRatio: maxHeightRatio,
+        occupiedCellsRatio: occupiedCells / MAX_CELLS
+    };
+
+    var strategy = getEffectiveBotStrategy(botState);
+    if (modeToUse === self.GamePlayMode.ZEN) {
+        strategy = 'ZEN';
+    }
+
+    if (strategy !== self.currentBotStrategy) {
+        self.currentBotStrategy = strategy;
+        updateBotStrategyUI(strategy);
+    }
 
     // --- AJUSTE DE PRIORIDADES SEGÚN RIESGO ---
     if (riskLocalBase < 50) {
@@ -2594,11 +2622,11 @@ function buildPredictedBoard() {
 		return grid;
 	}
 
-	function clearFullLines(grid) {
-		var cleared = 0;
-		var newGrid = [];
-		for (var y = grid.length - 1; y >= 0; y--) {
-			var isFull = true;
+        function clearFullLines(grid) {
+                var cleared = 0;
+                var newGrid = [];
+                for (var y = grid.length - 1; y >= 0; y--) {
+                        var isFull = true;
 			for (var x = 0; x < grid[y].length; x++) {
 				if (!grid[y][x]) {
 					isFull = false;
@@ -2621,13 +2649,29 @@ function buildPredictedBoard() {
 			newGrid.unshift(emptyRow);
 		}
 
-		return { grid: newGrid, lines: cleared };
-	}
+                return { grid: newGrid, lines: cleared };
+        }
+}
+
+function updateBotStrategyUI(strategy) {
+        const el = document.getElementById('bot-strategy-indicator');
+        if (!el) return;
+
+        var className = strategy.toLowerCase();
+
+        if (className === 'tetris_builder') {
+                className = 'tetris';
+        } else if (className === 'pro_attack') {
+                className = 'attack';
+        }
+
+        el.textContent = 'BOT STRATEGY: ' + strategy;
+        el.className = 'bot-strategy ' + className;
 }
 
 // Exponer el bot en el ámbito global para evitar referencias indefinidas
 if (typeof window !== "undefined") {
-	window.TetrisBot = TetrisBot;
+        window.TetrisBot = TetrisBot;
 }
 
 
