@@ -195,6 +195,19 @@ button:active {
         transform: translateX(20px);
 }
 
+#bot-strategy-indicator {
+        font-weight: bold;
+        font-size: 0.6rem;
+        padding: 4px 8px;
+        text-align: center;
+}
+
+.bot-strategy.survival { color: #e74c3c; }
+.bot-strategy.tetris   { color: #2ecc71; }
+.bot-strategy.attack   { color: #f39c12; }
+.bot-strategy.balanced { color: #4a90e2; }
+.bot-strategy.zen      { color: #9b59b6; }
+
 .game-section {
         background: var(--panel-bg);
         border: 2px solid #000;
