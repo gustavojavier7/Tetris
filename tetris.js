@@ -1807,13 +1807,15 @@ function TetrisBot(tetrisInstance) {
 
         // CONFIGURACIÓN DE HEURÍSTICA
         // Estos pesos definen la personalidad del bot.
-        this.weights = {
+        const baseWeights = {
                 lines: 4.0, // Recompensa: prioriza limpiar líneas (Tetris = 16pts)
                 holes: -1.0, // Penalidad: ponderación base para huecos por altura
                 roughness: -0.1, // Penalidad: rugosidad ponderada por ocupación
                 aggHeight: -0.5, // Penalidad: altura agregada ponderada por diferencia de borde
                 maxHeight: -2.0 // Penalidad: seguridad contra picos altos
         };
+
+        this.weights = Object.assign({}, baseWeights);
 
 var self = this;
 
@@ -1851,6 +1853,20 @@ this.setGameplayMode = function(mode) {
         lastAutoMode = mode;
 
         self.activeBotModeName = self.getModeName(mode);
+        self.currentBotStrategy = self.activeBotModeName;
+
+        var profile = self.modeProfiles[mode] || self.modeProfiles[GamePlayMode.BALANCED];
+        if (profile) {
+                self.weights = {
+                        lines: baseWeights.lines,
+                        holes: baseWeights.holes * profile.holes,
+                        roughness: baseWeights.roughness * profile.roughness,
+                        aggHeight: baseWeights.aggHeight * profile.aggHeight,
+                        maxHeight: baseWeights.maxHeight * profile.maxHeight
+                };
+        }
+
+        updateBotStrategyUI(self.activeBotModeName);
 
         if (self.tetris && self.tetris.updateModeStatus) {
                 self.tetris.updateModeStatus();
@@ -2028,6 +2044,36 @@ this.setGameplayMode(this.gameplayMode);
 // --- BUCLE DE DECISIÓN (FAST-FAIL) ---
 
 this.makeMove = function() {
+        // --- 1. Autoevaluación Táctica (Lógica Dinámica) ---
+        // Esto fuerza al bot a decidir su modo antes de cada movimiento
+        if (self.tetris && self.tetris.area) {
+                // Obtenemos la matriz actual del tablero
+                var currentGrid = self.tetris.area.board;
+
+                // Calculamos la altura crítica (0.0 a 1.0)
+                var maxHeightRatio = calculateMaxHeightRatio(currentGrid);
+
+                // Definimos umbrales de peligro
+                var newMode;
+                if (maxHeightRatio > 0.65) {
+                         // Si la torre está muy alta (>65%), entra en PÁNICO/DEFENSIVO
+                        newMode = self.GamePlayMode.SURVIVAL;
+                } else if (maxHeightRatio < 0.35) {
+                         // Si está baja (<35%), se pone AGRESIVO/CONSTRUCTOR
+                        newMode = self.GamePlayMode.TETRIS_BUILDER;
+                } else {
+                         // En zona media, juega BALANCEADO
+                        newMode = self.GamePlayMode.BALANCED;
+                }
+
+                // Aplicamos el modo inmediatamente (esto actualiza pesos y UI)
+                // Nota: Asume que ya aplicaste el arreglo de 'setGameplayMode' del paso anterior
+                if (self.gameplayMode !== newMode) {
+                        self.setGameplayMode(newMode);
+                }
+        }
+        // ----------------------------------------------------
+
         console.log("[BOT] makeMove() called. enabled=", self.enabled, "isThinking=", self.isThinking, "bestBotMove=", self.bestBotMove);
         if (!self.enabled) {
                 console.warn("[BOT][ABORT] makeMove(): bot not enabled");
