@@ -66,24 +66,13 @@
                     </div>
                 </div>
 
-                <div class="win95-block bot-strategy-banner">
-                    <div id="bot-strategy-indicator" class="bot-strategy balanced">
-                        BOT STRATEGY: BALANCED
+                <div class="win95-block bot-settings" id="botSettings">
+                    <div class="bot-settings-header" style="text-align: center; margin-bottom: 5px;">
+                        🤖 IA MODE
                     </div>
-                </div>
-
-                <div class="win95-block bot-settings hidden" id="botSettings">
-                    <div class="bot-settings-header">
-                        ⚡ Bot Strategy
+                    <div id="bot-strategy-indicator" class="bot-strategy balanced" style="font-size: 0.65rem; padding: 6px; border: 2px inset #fff; background: #222; text-align: center;">
+                        ANALIZANDO...
                     </div>
-                    <select id="botMode"
-                        onchange="if(window.bot && window.bot.setGameplayMode) window.bot.setGameplayMode(window.bot.GamePlayMode[this.value])">
-                        <option value="SURVIVAL">SURVIVAL</option>
-                        <option value="TETRIS_BUILDER">TETRIS_BUILDER</option>
-                        <option value="PRO_ATTACK">PRO_ATTACK</option>
-                        <option value="ZEN">ZEN</option>
-                        <option value="BALANCED" selected>BALANCED</option>
-                    </select>
                 </div>
 
                 <button class="btn-secondary" id="audioBtn">🔊 Sound On</button>
