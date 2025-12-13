@@ -2114,7 +2114,7 @@ this.makeMove = function() {
 
                 // Definimos umbrales de peligro
                 var newMode;
-                if (maxHeightRatio > 0.65) {
+                if (maxHeightRatio > 0.55) {
                          // Si la torre está muy alta (>65%), entra en PÁNICO/DEFENSIVO
                         newMode = self.GamePlayMode.SURVIVAL;
                 } else if (maxHeightRatio < 0.35) {
