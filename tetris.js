@@ -2103,69 +2103,24 @@ this.setGameplayMode(this.gameplayMode);
 // --- BUCLE DE DECISIÓN (FAST-FAIL) ---
 
 this.makeMove = function() {
-        // --- 1. Autoevaluación Táctica (Lógica Dinámica) ---
-        // Esto fuerza al bot a decidir su modo antes de cada movimiento
-        if (self.tetris && self.tetris.area) {
-                // Obtenemos la matriz actual del tablero
-                var currentGrid = self.tetris.area.board;
-
-                // Calculamos la altura crítica (0.0 a 1.0)
-                var maxHeightRatio = calculateMaxHeightRatio(currentGrid);
-
-                // Definimos umbrales de peligro
-                var newMode;
-                if (maxHeightRatio > 0.55) {
-                         // Si la torre está muy alta (>65%), entra en PÁNICO/DEFENSIVO
-                        newMode = self.GamePlayMode.SURVIVAL;
-                } else if (maxHeightRatio < 0.35) {
-                         // Si está baja (<35%), se pone AGRESIVO/CONSTRUCTOR
-                        newMode = self.GamePlayMode.TETRIS_BUILDER;
-                } else {
-                         // En zona media, juega BALANCEADO
-                        newMode = self.GamePlayMode.BALANCED;
-                }
-
-                // Aplicamos el modo inmediatamente (esto actualiza pesos y UI)
-                // Nota: Asume que ya aplicaste el arreglo de 'setGameplayMode' del paso anterior
-                if (self.gameplayMode !== newMode) {
-                        self.setGameplayMode(newMode);
-                }
-        }
-        // ----------------------------------------------------
-
-        console.log("[BOT] makeMove() called. enabled=", self.enabled, "isThinking=", self.isThinking, "bestBotMove=", self.bestBotMove);
-        if (!self.enabled) {
-                console.warn("[BOT][ABORT] makeMove(): bot not enabled");
-                return false;
-        }
-        if (self.tetris.paused) { return false; }
+        console.log("[BOT] makeMove() called. enabled=", self.enabled);
+        if (!self.enabled) return false;
+        if (self.tetris.paused) return false;
+        
         var actorPuzzle = self.tetris.puzzle;
-        if (!actorPuzzle || !actorPuzzle.isRunning()) { return false; }
-        if (self.isThinking) {
-                console.warn("[BOT][ABORT] makeMove(): still thinking");
-                return false;
-        }
-        if (self.bestBotMove) {
-                console.warn("[BOT][ABORT] makeMove(): move already pending");
-                return false;
-        }
+        if (!actorPuzzle || !actorPuzzle.isRunning()) return false;
+        if (self.isThinking || self.bestBotMove) return false;
 
         self.isThinking = true;
-
-        // Construir el tablero proyectado con la caída final del humano.
         self.predictedBoard = buildPredictedBoard();
 
-        // 1. Calcular la mejor jugada posible
-        // (Nota: Esto es intensivo, podría ir en un WebWorker en el futuro)
+        // Llamamos a la función UNIFICADA
         var bestMove = self.calculateBestMove();
 
         self.isThinking = false;
         self.clearGhostPreview();
 
-        // 2. Ejecutar la jugada visualmente
-        if (!bestMove) {
-                return false;
-        }
+        if (!bestMove) return false;
 
         self.bestBotMove = bestMove;
         self.renderGhostPreview(bestMove);
@@ -2276,97 +2231,121 @@ this.executeMoveSmoothly = function(move) {
         playStep();
                         };
 
-this.calculateBestMove = function() {
-    var bestScore = Infinity;
-    var bestMove = null;
-    var centerX = self.tetris.areaX / 2;
-    var zeroHoleMoves = [];
+ this.calculateBestMove = function() {
+     // ========================================================================
+     // PARTE A: META-HEURÍSTICA (Decisión de Estrategia Dinámica)
+     // ========================================================================
+     var currentGrid = self.tetris.area.board;
+     var maxHeightRatio = calculateMaxHeightRatio(currentGrid);
 
-    var activePieceType = (self.tetris && self.tetris.puzzle) ? self.tetris.puzzle.type : 'unknown';
-    console.log("[BOT] calculating best move for piece type:", activePieceType);
+     // 1. Determinar Perfil según Altura (Umbral 55%)
+     var profileKey = self.GamePlayMode.BALANCED;
+     var profileName = 'BALANCED';
 
-    // --- Deuda estructural inicial: evaluar el costo de agujeros del tablero actual ---
-    var initialGrid = cloneAreaGrid(self.tetris.area.board);
-    var initialEvaluation = self.evaluateGrid(initialGrid, 0);
-    var initialHolesCost = initialEvaluation.holes;
+     if (maxHeightRatio > 0.55) {
+         profileKey = self.GamePlayMode.SURVIVAL;
+         profileName = 'SURVIVAL';
+     } else if (maxHeightRatio < 0.35) {
+         profileKey = self.GamePlayMode.TETRIS_BUILDER;
+         profileName = 'TETRIS_BUILDER';
+     }
 
-    for (var r = 0; r < 4; r++) {
-        for (var x = 0; x < self.tetris.areaX; x++) {
-            var simulation = self.simulateDrop(r, x);
-            if (!simulation.isValid) {
-                console.warn("[BOT][SIM] invalid move for rotation=", r, "x=", x);
-                continue;
-            }
+     // 2. Actualizar UI (Feedback visual)
+     if (self.activeBotModeName !== profileName) {
+         self.activeBotModeName = profileName;
+         updateBotStrategyUI(profileName);
+     }
 
-            var evaluation = self.evaluateGrid(simulation.grid, simulation.linesCleared);
-            var score = evaluation.score;
-            var holesCost = evaluation.holes;
+     // 3. Compilar Pesos Dinámicos (Base + Multiplicadores del Perfil)
+     var profile = self.modeProfiles[profileKey];
+     var activeWeights = {
+         lines: baseWeights.lines,
+         holes: baseWeights.holes * (profile.holes || 1.0),
+         roughness: baseWeights.roughness * (profile.roughness || 1.0),
+         chimney: baseWeights.chimney * (profile.chimney || 1.0),
+         aggHeight: baseWeights.aggHeight * (profile.aggHeight || 1.0),
+         maxHeight: baseWeights.maxHeight * (profile.maxHeight || 1.0),
+         blocked: baseWeights.blocked
+     };
 
-            var move = {
-                rotation: r,
-                x: x,
-                score: score,
-                hasZeroNetDebt: holesCost <= initialHolesCost,
-                maxHeight: getMaxHeight(simulation.grid)
-            };
+     // ========================================================================
+     // PARTE B: BÚSQUEDA HEURÍSTICA (Simulación de Movimientos)
+     // ========================================================================
+     var bestScore = Infinity;
+     var bestMove = null;
+     var zeroHoleMoves = [];
 
-            if (move.hasZeroNetDebt) {
-                zeroHoleMoves.push(move);
-            }
+     // --- Deuda técnica inicial ---
+     var initialEvaluation = self.evaluateGrid(cloneAreaGrid(currentGrid), 0, activeWeights);
+     var initialHolesCost = initialEvaluation.holes * activeWeights.holes; // Costo ponderado
 
-            if (score < bestScore) {
-                bestScore = score;
-                bestMove = move;
-            }
-        }
-    }
+     for (var r = 0; r < 4; r++) {
+         for (var x = 0; x < self.tetris.areaX; x++) {
+             var simulation = self.simulateDrop(r, x);
+             if (!simulation.isValid) continue;
 
-    var finalBestMove = null;
+             // PASO CRÍTICO: Pasamos los pesos calculados a la evaluación
+             var evaluation = self.evaluateGrid(simulation.grid, simulation.linesCleared, activeWeights);
+             var score = evaluation.score;
 
-    if (zeroHoleMoves.length > 0) {
-        var bestZeroHoleScore = Infinity;
-        for (var i = 0; i < zeroHoleMoves.length; i++) {
-            var candidate = zeroHoleMoves[i];
+             var move = {
+                 rotation: r,
+                 x: x,
+                 score: score,
+                 // Usamos los mismos pesos para determinar deuda neta
+                 hasZeroNetDebt: (evaluation.holes * activeWeights.holes) <= initialHolesCost,
+                 maxHeight: getMaxHeight(simulation.grid)
+             };
 
-            // Fast fail: si la puntuación no mejora y la altura no es menor, saltar pronto.
-            if (candidate.score > bestZeroHoleScore && (!finalBestMove || candidate.maxHeight >= finalBestMove.maxHeight)) {
-                continue;
-            }
+             if (move.hasZeroNetDebt) zeroHoleMoves.push(move);
 
-            if (candidate.score < bestZeroHoleScore ||
+             if (score < bestScore) {
+                 bestScore = score;
+                 bestMove = move;
+             }
+         }
+     }
+
+     // Lógica de selección final (Mejor movimiento vs Deuda Cero)
+     var finalBestMove = null;
+     if (zeroHoleMoves.length > 0) {
+         var bestZeroHoleScore = Infinity;
+         for (var i = 0; i < zeroHoleMoves.length; i++) {
+             var candidate = zeroHoleMoves[i];
+             // Priorizamos movimientos seguros si no sacrifican demasiado score o altura
+             if (candidate.score < bestZeroHoleScore ||
                 (candidate.score === bestZeroHoleScore && finalBestMove && candidate.maxHeight < finalBestMove.maxHeight)) {
-                bestZeroHoleScore = candidate.score;
-                finalBestMove = candidate;
-            } else if (candidate.score === bestZeroHoleScore && !finalBestMove) {
-                finalBestMove = candidate;
-            }
-        }
-    } else {
-        finalBestMove = bestMove;
-    }
+                 bestZeroHoleScore = candidate.score;
+                 finalBestMove = candidate;
+             }
+         }
+     } else {
+         finalBestMove = bestMove;
+     }
 
-    function getMaxHeight(grid) {
-        var maxH = 0;
-        for (var col = 0; col < grid[0].length; col++) {
-            for (var row = 0; row < grid.length; row++) {
-                if (grid[row][col] !== 0) {
-                    var height = self.tetris.areaY - row;
-                    if (height > maxH) { maxH = height; }
-                    break;
-                }
-            }
-        }
-        return maxH;
-    }
+     // Helpers internos...
+     function getMaxHeight(grid) {
+         var maxH = 0;
+         for (var col = 0; col < grid[0].length; col++) {
+             for (var row = 0; row < grid.length; row++) {
+                 if (grid[row][col] !== 0) {
+                     var h = self.tetris.areaY - row;
+                     if (h > maxH) maxH = h;
+                     break;
+                 }
+             }
+         }
+         return maxH;
+     }
 
-    console.log("[BOT] bestMove result:", finalBestMove);
+     return finalBestMove ? { rotation: finalBestMove.rotation, x: finalBestMove.x } : null;
+ };
 
-    return finalBestMove ? { rotation: finalBestMove.rotation, x: finalBestMove.x } : null;
-};
+ this.evaluateGrid = function(grid, linesCleared, currentWeights) {
+     const ROWS = self.tetris.areaY;
+     const COLS = self.tetris.areaX;
 
-this.evaluateGrid = function(grid, linesCleared) {
-    const ROWS = self.tetris.areaY;
-    const COLS = self.tetris.areaX;
+     const weights = currentWeights || self.weights;
 
     let heights = new Array(COLS).fill(0);
     let aggregateHeight = 0;
@@ -2419,20 +2398,20 @@ this.evaluateGrid = function(grid, linesCleared) {
         }
     }
 
-    // --- CÁLCULO FINAL DEL SCORE (Usando this.weights) ---
+    // --- CÁLCULO FINAL DEL SCORE (Usando currentWeights) ---
     let score = 0;
-    
+
     // Penalidades (Suman costo)
-    score += holes * self.weights.holes;
-    score += closedHoles * (self.weights.holes * 2); // Penalidad doble para huecos cerrados
-    score += roughness * self.weights.roughness;
-    score += wells * self.weights.chimney;
-    score += aggregateHeight * self.weights.aggHeight;
-    score += (maxHeight * maxHeight) * (self.weights.maxHeight / 10); // Exponencial suave
+    score += holes * weights.holes;
+    score += closedHoles * (weights.holes * 2); // Penalidad doble para huecos cerrados
+    score += roughness * weights.roughness;
+    score += wells * weights.chimney;
+    score += aggregateHeight * weights.aggHeight;
+    score += (maxHeight * maxHeight) * (weights.maxHeight / 10); // Exponencial suave
 
     // Recompensas (Restan costo)
     if (linesCleared > 0) {
-        score -= linesCleared * self.weights.lines;
+        score -= linesCleared * weights.lines;
     }
 
     return {
@@ -2472,7 +2451,7 @@ function simulateNextPiece(baseGrid, nextPiece) {
 
                         var merged = mergePiece(baseGrid, rotatedPiece, x, dropY);
                         var cleared = clearFullLines(merged);
-                        var evaluation = self.evaluateGrid(cleared.grid, cleared.lines);
+                        var evaluation = self.evaluateGrid(cleared.grid, cleared.lines, self.weights);
 
                         if (!evaluation) { continue; }
 
