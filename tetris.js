@@ -424,16 +424,19 @@ function Tetris()
                         }
                         document.getElementById('tetris-pause').style.display = 'block';
                         document.getElementById('tetris-resume').style.display = 'none';
-                        self.stats.timerId = setInterval(self.stats.incTime, 1000);
+                        if (!self.stats.timerId) {
+                                self.stats.timerId = setInterval(self.stats.incTime, 1000);
+                        }
                         self.paused = false;
                 } else {
                         // Pause
                         if (!self.puzzle.isRunning()) return;
                         self.puzzle.clearTimers();
                         document.getElementById('tetris-pause').style.display = 'none';
-			document.getElementById('tetris-resume').style.display = 'block';
-			clearTimeout(self.stats.timerId);
-			self.paused = true;
+                        document.getElementById('tetris-resume').style.display = 'block';
+                        clearInterval(self.stats.timerId);
+                        self.stats.timerId = null;
+                        self.paused = true;
                         self.puzzle.running = false;
                 }
         };
@@ -1223,12 +1226,13 @@ function Window(id)
 		 * @return void
 		 * @access public
 		 */
-		this.stop = function()
-		{
-			if (this.timerId) {
-				clearInterval(this.timerId);
-			}
-		};
+                this.stop = function()
+                {
+                        if (this.timerId) {
+                                clearInterval(this.timerId);
+                                this.timerId = null;
+                        }
+                };
 
 		/**
 		 * Reset statistics - update html
