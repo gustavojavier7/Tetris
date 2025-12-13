@@ -2231,246 +2231,110 @@ this.calculateBestMove = function() {
     return finalBestMove ? { rotation: finalBestMove.rotation, x: finalBestMove.x } : null;
 };
 
-this.evaluateGrid = function(grid, linesCleared, skipLookahead) {
-    var TOTAL_ROWS = self.tetris.areaY; // 22
-    var TOTAL_COLS = self.tetris.areaX; // 12
-    var MAX_RISK_CELLS = TOTAL_ROWS * TOTAL_COLS; // 264
-    var MAX_CELLS = TOTAL_ROWS * TOTAL_COLS;
+this.evaluateGrid = function(grid, linesCleared) {
+    const ROWS = self.tetris.areaY; // 22
+    const COLS = self.tetris.areaX; // 12
 
-    var modeToUse = getActiveMode(grid);
-    var maxHeightRatio = 0;
+    let heights = new Array(COLS).fill(0);
+    let aggregateHeight = 0;
+    let maxHeight = 0;
 
-    var COMMON_SCALE = 10000;
-    
-    // --- PEORES CASOS ---
-    var WORST_HOLES_COST = 36 * (TOTAL_ROWS * (TOTAL_ROWS + 1) / 2); // 9,108
-    var WORST_ROUGHNESS_COST = (TOTAL_COLS - 1) * TOTAL_ROWS * MAX_RISK_CELLS; // 63,888
-    
-    // CHIMENEA ACTUALIZADA CON ALTURA DE BASE
-    var MAX_CHIMNEYS = 4;
-    var MAX_CHIMNEY_DEPTH = 4;
-    var MAX_BASE_HEIGHT = TOTAL_ROWS; // 22
-    var MAX_HOLES_PER_CHIMNEY = 20;
-    var WORST_CHIMNEY_COST = MAX_CHIMNEYS * MAX_CHIMNEY_DEPTH * (MAX_BASE_HEIGHT + MAX_HOLES_PER_CHIMNEY);
-    // = 4 × 4 × 42 = 672
-    
-    var WORST_MAX_HEIGHT = TOTAL_ROWS; // 22
-    var WORST_AGG_HEIGHT = TOTAL_COLS * TOTAL_ROWS; // 264
-    
-    // --- COEFICIENTES DE PREFERENCIA (DINÁMICOS) ---
-    var HOLES_PREFERENCE;
-    var ROUGHNESS_PREFERENCE;
-    var CHIMNEY_PREFERENCE;
-    var MAX_HEIGHT_PREFERENCE;
-    var AGG_HEIGHT_PREFERENCE;
-    
-    // --- ACUMULADORES ---
-    var holesCostRaw = 0;
-    var roughnessCostRaw = 0;
-    var chimneyCostRaw = 0;
-    var maxHeight = 0;
-    var aggregateHeight = 0;
-    var occupiedCells = 0;
-    
-    var heights = [];
-    var holesInCol = [];
-    var holesInRow = new Array(TOTAL_ROWS).fill(0);
-    var highestClearedRow = TOTAL_ROWS;
-    
-    // --- ESCANEO DEL TABLERO ---
-    for (var x = 0; x < TOTAL_COLS; x++) {
-        var colHeight = 0;
-        var colHoles = 0;
-        var blockFound = false;
-        
-        for (var y = 0; y < TOTAL_ROWS; y++) {
-            var hasBlock = (grid[y][x] !== 0);
-            
-            if (hasBlock) {
-                occupiedCells++;
-                if (!blockFound) {
-                    colHeight = TOTAL_ROWS - y;
-                    blockFound = true;
-                    if (colHeight > maxHeight) {
-                        maxHeight = colHeight;
-                    }
-                }
-            } else if (blockFound) {
-                colHoles++;
-                holesInRow[y]++;
-            }
-        }
-        
-        heights.push(colHeight);
-        holesInCol.push(colHoles);
-        aggregateHeight += colHeight;
-    }
+    let holes = 0;
+    let holeDepthSum = 0;
+    let closedHoles = 0;
 
-    // --- CÁLCULO TEMPRANO DE RIESGO LOCAL ---
-    // Riesgo principal basado en la altura máxima de columna (no en ocupación).
-    maxHeightRatio = maxHeight / TOTAL_ROWS;
-    var riskLocalBase = maxHeightRatio * 100;
+    let roughness = 0;
+    let wells = 0;
+    let topRowsOccupied = 0;
 
-    var botState = {
-        maxHeightRatio: maxHeightRatio,
-        occupiedCellsRatio: occupiedCells / MAX_CELLS
-    };
+    // --- ALTURAS Y AGUJEROS ---
+    for (let x = 0; x < COLS; x++) {
+        let blockFound = false;
+        let colHeight = 0;
 
-    var strategy = getEffectiveBotStrategy(botState);
-    if (modeToUse === self.GamePlayMode.ZEN) {
-        strategy = 'ZEN';
-    }
-
-    if (strategy !== self.currentBotStrategy) {
-        self.currentBotStrategy = strategy;
-        updateBotStrategyUI(strategy);
-    }
-
-    // --- AJUSTE DE PRIORIDADES SEGÚN RIESGO ---
-    if (riskLocalBase < 50) {
-        // Bajo riesgo: mayor énfasis en preparar setups (rugosidad/chimeneas)
-        HOLES_PREFERENCE = 3.0;
-        ROUGHNESS_PREFERENCE = 5.0;
-        CHIMNEY_PREFERENCE = 4.5;
-        MAX_HEIGHT_PREFERENCE = 2.5;
-        AGG_HEIGHT_PREFERENCE = 2.0;
-    } else if (riskLocalBase <= 70) {
-        // Riesgo medio: distribución equilibrada
-        HOLES_PREFERENCE = 4.5;
-        ROUGHNESS_PREFERENCE = 4.0;
-        CHIMNEY_PREFERENCE = 2.5;
-        MAX_HEIGHT_PREFERENCE = 3.5;
-        AGG_HEIGHT_PREFERENCE = 3.0;
-    } else {
-        // Alto riesgo: penalización fuerte a huecos y alturas
-        HOLES_PREFERENCE = 6.5;
-        ROUGHNESS_PREFERENCE = 3.0;
-        CHIMNEY_PREFERENCE = 1.5;
-        MAX_HEIGHT_PREFERENCE = 5.0;
-        AGG_HEIGHT_PREFERENCE = 4.0;
-    }
-
-    // --- AJUSTE POR MODO DE JUEGO ---
-    var modeProfile = self.modeProfiles[modeToUse] || self.modeProfiles[self.GamePlayMode.BALANCED];
-    HOLES_PREFERENCE *= modeProfile.holes;
-    ROUGHNESS_PREFERENCE *= modeProfile.roughness;
-    CHIMNEY_PREFERENCE *= modeProfile.chimney;
-    MAX_HEIGHT_PREFERENCE *= modeProfile.maxHeight;
-    AGG_HEIGHT_PREFERENCE *= modeProfile.aggHeight;
-
-    // --- COSTOS BRUTOS ---
-    
-    // A. AGUJEROS
-    for (var y = 0; y < TOTAL_ROWS; y++) {
-        if (holesInRow[y] > 0) {
-            var rowHeightWeight = TOTAL_ROWS - y;
-            holesCostRaw += (holesInRow[y] * holesInRow[y]) * rowHeightWeight;
-            
-            if (y < highestClearedRow) {
-                highestClearedRow = y;
-            }
-        }
-    }
-    
-    // B. RUGOSIDAD
-    var roughnessSum = 0;
-    for (var i = 0; i < TOTAL_COLS - 1; i++) {
-        roughnessSum += Math.abs(heights[i] - heights[i + 1]);
-    }
-    roughnessCostRaw = roughnessSum * occupiedCells;
-    
-    // C. CHIMENEAS (CORREGIDO CON ALTURA DE BASE)
-    for (var x = 0; x < TOTAL_COLS; x++) {
-        var hLeft = (x === 0) ? TOTAL_ROWS : heights[x - 1];
-        var hRight = (x === TOTAL_COLS - 1) ? TOTAL_ROWS : heights[x + 1];
-        var minWallHeight = Math.min(hLeft, hRight);
-        
-        var chimneyDepth = minWallHeight - heights[x];
-        
-        if (chimneyDepth >= 4) {
-            // Fórmula: profundidad × (altura_base + agujeros)
-            var baseHeight = heights[x];
-            chimneyCostRaw += chimneyDepth * (baseHeight + holesInCol[x]);
-        }
-    }
-    
-    // La jugada tiene agujeros si el costo bruto de agujeros es mayor a 0.
-    // var hasHolesAfterMove = (holesCostRaw > 0); // Eliminada la variable de la restricción de recompensa.
-
-    // --- NORMALIZACIÓN ---
-    var holesCostNormalized = (holesCostRaw / WORST_HOLES_COST) * COMMON_SCALE * HOLES_PREFERENCE;
-    var roughnessCostNormalized = (roughnessCostRaw / WORST_ROUGHNESS_COST) * COMMON_SCALE * ROUGHNESS_PREFERENCE;
-    var chimneyCostNormalized = (chimneyCostRaw / WORST_CHIMNEY_COST) * COMMON_SCALE * CHIMNEY_PREFERENCE;
-    var maxHeightCostNormalized = (maxHeight / WORST_MAX_HEIGHT) * COMMON_SCALE * MAX_HEIGHT_PREFERENCE;
-    var aggHeightCostNormalized = (aggregateHeight / WORST_AGG_HEIGHT) * COMMON_SCALE * AGG_HEIGHT_PREFERENCE;
-    
-    var heuristicCost = holesCostNormalized + 
-                       roughnessCostNormalized + 
-                       chimneyCostNormalized + 
-                       maxHeightCostNormalized + 
-                       aggHeightCostNormalized;
-
-    
-    // --- RECOMPENSA POR LÍNEAS ---
-    var linesReward = 0;
-    
-    // REGLA MODIFICADA: Recompensar por líneas, sin importar si quedan agujeros.
-    // Se elimina la condición `&& !hasHolesAfterMove`
-    if (linesCleared > 0) {
-        var baseReward = linesCleared * 100;
-        var bonusReward = linesCleared * linesCleared * 500;
-        var heightBonus = (TOTAL_ROWS - highestClearedRow) * 100;
-        linesReward = baseReward + bonusReward + heightBonus;
-    }
-    
-    // --- CÁLCULO FINAL ---
-    var S_SENSITIVITY = 5000;
-    var totalRiskScore = riskLocalBase * (1 + (heuristicCost / S_SENSITIVITY)) - linesReward;
-
-    var modeName = Object.keys(GamePlayMode).find(function(key) { return GamePlayMode[key] === modeToUse; }) || self.getModeName(modeToUse);
-
-    self.activeBotModeName = modeName;
-
-    if (self.tetris && self.tetris.updateModeStatus) {
-            self.tetris.updateModeStatus();
-    }
-
-    // --- LOOKAHEAD DINÁMICO ---
-    var scoreCurrent = totalRiskScore;
-    var scoreFuture = null;
-    var finalScore = scoreCurrent;
-
-    var isAutoLookaheadEnabled = !skipLookahead && autoMode && !manualModeOverride;
-    var weightCurrent = 1;
-    var weightFuture = 0;
-
-    if (isAutoLookaheadEnabled) {
-            weightCurrent = maxHeightRatio > 0.5 ? 0.70 : 0.40;
-            weightFuture = maxHeightRatio > 0.5 ? 0.30 : 0.60;
-    }
-
-    if (isAutoLookaheadEnabled && self.tetris && self.tetris.puzzle && self.tetris.puzzle.puzzles) {
-            var nextType = self.tetris.puzzle.nextType;
-            if (nextType !== null && nextType !== undefined) {
-                    var nextPiece = self.tetris.puzzle.puzzles[nextType];
-
-                    // Simular la mejor colocación posible de la siguiente pieza.
-                    scoreFuture = simulateNextPiece(grid, nextPiece);
-
-                    if (scoreFuture !== null) {
-                            finalScore = (scoreCurrent * weightCurrent) + (scoreFuture * weightFuture);
-                    } else {
-                            finalScore = scoreCurrent;
-                    }
+        for (let y = 0; y < ROWS; y++) {
+            if (grid[y][x]) {
+                if (!blockFound) {
+                    colHeight = ROWS - y;
+                    blockFound = true;
+                }
+            } else if (blockFound) {
+                holes++;
+                holeDepthSum += (ROWS - y);
             }
-    } else {
-            finalScore = scoreCurrent;
+        }
+
+        heights[x] = colHeight;
+        aggregateHeight += colHeight;
+        if (colHeight > maxHeight) maxHeight = colHeight;
     }
 
-    // Silenciado: evitar logs de evaluación en consola
+    // --- AGUJEROS CERRADOS (CAVES) ---
+    for (let y = 1; y < ROWS - 1; y++) {
+        for (let x = 0; x < COLS; x++) {
+            if (!grid[y][x] && grid[y - 1][x] && grid[y + 1][x]) {
+                closedHoles++;
+            }
+        }
+    }
 
-    return { score: finalScore, holes: holesCostRaw };
+    // --- RUGOSIDAD ---
+    for (let i = 0; i < COLS - 1; i++) {
+        roughness += Math.abs(heights[i] - heights[i + 1]);
+    }
+
+    // --- POZOS / CHIMENEAS ---
+    for (let x = 0; x < COLS; x++) {
+        let left = (x === 0) ? ROWS : heights[x - 1];
+        let right = (x === COLS - 1) ? ROWS : heights[x + 1];
+        let wellDepth = Math.min(left, right) - heights[x];
+        if (wellDepth >= 3) {
+            wells += wellDepth;
+        }
+    }
+
+    // --- OCUPACIÓN EN ZONA SPAWN (FILAS SUPERIORES) ---
+    for (let y = 0; y < 4; y++) {
+        for (let x = 0; x < COLS; x++) {
+            if (grid[y][x]) topRowsOccupied++;
+        }
+    }
+
+    // --- FUNCIÓN DE COSTO (CONSERVADORA) ---
+    let score = 0;
+
+    // Huecos (enemigo principal)
+    score += closedHoles * 5000;
+    score += holeDepthSum * 120;
+    score += holes * 800;
+
+    // Riesgo de muerte
+    score += topRowsOccupied * 3000;
+    score += Math.pow(maxHeight, 2) * 25;
+
+    // Estructura
+    score += wells * 300;
+    score += aggregateHeight * 20;
+    score += roughness * 15;
+
+    // Bonus pequeño por limpieza segura
+    if (linesCleared > 0) {
+        score -= linesCleared * 200;
+    }
+
+    return {
+        score,
+        maxHeight,
+        aggregateHeight,
+        holes,
+        holeDepthSum,
+        closedHoles,
+        roughness,
+        wells,
+        topRowsOccupied
+    };
 };
+
 
 function simulateNextPiece(baseGrid, nextPiece) {
         if (!nextPiece || !nextPiece.length || !baseGrid || !baseGrid.length) {
@@ -2501,7 +2365,7 @@ function simulateNextPiece(baseGrid, nextPiece) {
 
                         var merged = mergePiece(baseGrid, rotatedPiece, x, dropY);
                         var cleared = clearFullLines(merged);
-                        var evaluation = self.evaluateGrid(cleared.grid, cleared.lines, true);
+                        var evaluation = self.evaluateGrid(cleared.grid, cleared.lines);
 
                         if (!evaluation) { continue; }
 
