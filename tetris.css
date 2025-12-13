@@ -289,6 +289,18 @@ button:active {
         border: 1px solid #000;
 }
 
+/* --- AGREGA ESTO A TU CSS PARA HACER VISIBLES LAS PIEZAS --- */
+
+/* Aplica a los bloques dentro del área de juego y en la previsualización */
+#tetris-area > div,
+#tetris-nextpuzzle > div {
+        width: var(--unit);   /* Usa la variable definida en :root (20px) */
+        height: var(--unit);
+        position: absolute;   /* Crítico: permite que top/left del JS funcionen */
+        box-sizing: border-box;
+        border: 1px solid rgba(0, 0, 0, 0.2); /* Opcional: borde sutil para relieve */
+}
+
 .block0 { background: #1F6F43; }
 .block1 { background: #0B2A4A; }
 .block2 { background: #8A4FFF; }
