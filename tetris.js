@@ -342,9 +342,23 @@ function Tetris()
                         gameMessageClearTimeout = null;
                 }
 
-                self.gameMessageEl.innerHTML = '<h2>Game Over</h2><p>Try again?</p>';
+                self.gameMessageEl.style.display = '';
+                self.gameMessageEl.innerHTML = '<h2>Game Over</h2>';
                 self.gameMessageEl.classList.remove('idle');
                 self.gameMessageEl.classList.add('active', 'gameover');
+        };
+
+        this.clearGameMessage = function() {
+                if (!self.gameMessageEl) return;
+
+                if (gameMessageClearTimeout) {
+                        clearTimeout(gameMessageClearTimeout);
+                        gameMessageClearTimeout = null;
+                }
+
+                self.gameMessageEl.classList.remove('active', 'gameover');
+                self.gameMessageEl.classList.add('idle');
+                self.gameMessageEl.style.display = 'none';
         };
 
         this.scheduleGameMessageClear = function() {
@@ -355,9 +369,7 @@ function Tetris()
                 }
 
                 gameMessageClearTimeout = setTimeout(function() {
-                        self.gameMessageEl.classList.remove('active', 'gameover');
-                        self.gameMessageEl.classList.add('idle');
-                        self.gameMessageEl.innerHTML = defaultGameMessage || '<h2>PRESS START</h2><p>Ready to play?</p>';
+                        self.clearGameMessage();
                         gameMessageClearTimeout = null;
                 }, 5000);
         };
@@ -369,8 +381,8 @@ function Tetris()
                 self.updateResponsiveUnit();
                 self.reset();
 
-                if (typeof self.scheduleGameMessageClear === 'function') {
-                        self.scheduleGameMessageClear();
+                if (typeof self.clearGameMessage === 'function') {
+                        self.clearGameMessage();
                 }
 
 		if (window.bot) {
@@ -2716,9 +2728,6 @@ document.addEventListener('DOMContentLoaded', function() {
         playBtn.addEventListener('click', function() {
             console.log('[UI] ▶ Botón PLAY presionado');
             window.tetris.start();
-            if (window.tetris && typeof window.tetris.scheduleGameMessageClear === 'function') {
-                window.tetris.scheduleGameMessageClear();
-            }
         });
     }
     
