@@ -666,24 +666,27 @@ function Tetris()
                 this.getX = function() { return this.x; };
                 this.getY = function() { return this.y; };
 
-		this.mayPlace = function() {
-			var puzzle = this.puzzles[this.type];
-			var areaStartX = parseInt((this.area.x - puzzle[0].length) / 2);
-			var areaStartY = 1;
-			var lineFound = false;
-			var lines = 0;
-			for (var y = puzzle.length - 1; y >= 0; y--) {
-				for (var x = 0; x < puzzle[y].length; x++) {
-					if (puzzle[y][x]) {
-						lineFound = true;
-						if (this.area.getBlock(areaStartY, areaStartX + x)) return false;
-					}
-				}
-				if (lineFound) lines++;
-				if (areaStartY - lines < 0) break;
-			}
-			return true;
-		};
+                this.mayPlace = function() {
+                        var puzzle = this.puzzles[this.type];
+                        var areaStartX = parseInt((this.area.x - puzzle[0].length) / 2);
+                        var areaStartY = 1;
+                        var lines = 0;
+
+                        for (var y = puzzle.length - 1; y >= 0; y--) {
+                                var lineFound = false;
+                                for (var x = 0; x < puzzle[y].length; x++) {
+                                        if (puzzle[y][x]) {
+                                                lineFound = true;
+                                                // Calculamos la fila real: Fila inicial menos las líneas acumuladas
+                                                var targetY = areaStartY - lines;
+                                                if (targetY < 0) continue; // Si está fuera por arriba, ignorar
+                                                if (this.area.getBlock(targetY, areaStartX + x)) return false;
+                                        }
+                                }
+                                if (lineFound) lines++;
+                        }
+                        return true;
+                };
 
                 this.place = function() {
                         // Stats
