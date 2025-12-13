@@ -385,6 +385,12 @@ function Tetris()
         };
 
                 this.reset = function() {
+                        if (window.bot) {
+                                if (typeof window.bot.cancelPlanning === 'function') {
+                                        window.bot.cancelPlanning();
+                                }
+                                window.bot.currentPuzzle = null;
+                        }
                         if (self.puzzle) {
                                 self.puzzle.destroy();
                                 self.puzzle = null;
@@ -611,15 +617,19 @@ function Tetris()
                         this.fallDownID = setTimeout(() => this.fallDown(), this.speed);
                 };
 
-		this.reset = function() {
-			this.clearTimers();
-			if (this.type === null) {
-				this.type = random(this.puzzles.length);
-				this.nextType = random(this.puzzles.length);
-			} else {
-				this.type = this.nextType;
-				this.nextType = random(this.puzzles.length);
-			}
+                this.reset = function(forceFreshType) {
+                        this.clearTimers();
+                        if (forceFreshType) {
+                                this.type = null;
+                                this.nextType = null;
+                        }
+                        if (this.type === null) {
+                                this.type = random(this.puzzles.length);
+                                this.nextType = random(this.puzzles.length);
+                        } else {
+                                this.type = this.nextType;
+                                this.nextType = random(this.puzzles.length);
+                        }
 			this.position = 0;
 			this.speed = this.tetris.zenMode ? 1000 : (80 + (700 / this.tetris.stats.getLevel()));
 			this.running = false;
@@ -636,7 +646,7 @@ function Tetris()
 			this.y = null;
 		};
 
-                this.reset(); // reset() ya establece nextType internamente
+                this.reset(true); // reset() ya establece nextType internamente
 
                 /**
                  * Recalcula la sugerencia del bot tras un movimiento humano sin ejecutar la jugada.
