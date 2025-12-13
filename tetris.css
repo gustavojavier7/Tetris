@@ -278,35 +278,22 @@ button:active {
 }
 
 #tetris-area {
-	background: var(--beige);
-	position: relative !important;
-	left: 0 !important;
-	top: 0 !important;
-	width: calc(var(--unit) * var(--area-x) - 1px);
-	height: 100%;
-	max-height: 100%;
-	min-height: calc(var(--unit) * var(--area-y) - 1px);
-	border: 1px solid #000;
+        background: var(--beige);
+        position: relative !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: calc(var(--unit) * var(--area-x) - 1px);
+        height: 100%;
+        max-height: 100%;
+        min-height: calc(var(--unit) * var(--area-y) - 1px);
+        border: 1px solid #000;
 }
 
-.block0,
-.block1,
-.block2,
-.block3,
-.block4,
-.block5,
-.block6 {
-        position: absolute;
-        width: calc(var(--unit) - 1px);
-        height: calc(var(--unit) - 1px);
-        border: 1px solid rgba(0, 0, 0, 0.3);
-        background: #0B2A4A;
-}
-
-.block1 { background: #B00020; }
+.block0 { background: #1F6F43; }
+.block1 { background: #0B2A4A; }
 .block2 { background: #8A4FFF; }
 .block3 { background: #7A4A1E; }
-.block4 { background: #1F6F43; }
+.block4 { background: #B00020; }
 .block5 { background: #5A5A5A; }
 .block6 { background: #F2F2F2; }
 
