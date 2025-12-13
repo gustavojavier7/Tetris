@@ -492,7 +492,18 @@ function Tetris()
 
         this.space = function() {
                 if (!self.canHumanControlPiece('SPACE')) return;
-                self.puzzle.stop();
+                if (!self.puzzle) return;
+
+                // Detener únicamente la gravedad normal (NO marcar la pieza como stopped)
+                if (typeof self.puzzle.clearFallDownTimer === 'function') {
+                        self.puzzle.clearFallDownTimer();
+                }
+
+                // Asegurar estado válido para hard drop
+                self.puzzle.running = true;
+                self.puzzle.stopped = false;
+
+                // Ejecutar caída forzada (hard drop)
                 self.puzzle.forceMoveDown();
         };
 
