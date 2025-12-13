@@ -35,8 +35,12 @@ function Tetris()
 	// El modo Co-op ha sido eliminado permanentemente del núcleo.
 	this.inputLocked = false; 
 
-	this.highscores = new Highscores(10);
-	this.paused = false;
+        this.highscores = new Highscores(10);
+        this.paused = false;
+
+        this.gameMessageEl = document.getElementById('gameMessage');
+        var defaultGameMessage = this.gameMessageEl ? this.gameMessageEl.innerHTML : '';
+        var gameMessageClearTimeout = null;
 
 	var SIDEBAR_UNITS = 9.5;
 	this.sidebarUnits = SIDEBAR_UNITS;
@@ -323,19 +327,51 @@ function Tetris()
                 el.style.color = color;
         };
 
-	this.updateBotToggleLabel = function() {
-		var botLabel = document.getElementById("tetris-menu-ai");
-		if (botLabel && window.bot) {
-			botLabel.innerHTML = "IA: " + (window.bot.enabled ? "ON" : "OFF");
-		}
-	};
+        this.updateBotToggleLabel = function() {
+                var botLabel = document.getElementById("tetris-menu-ai");
+                if (botLabel && window.bot) {
+                        botLabel.innerHTML = "IA: " + (window.bot.enabled ? "ON" : "OFF");
+                }
+        };
 
-	// --- CORE GAME LOOP ---
+        this.showGameOverMessage = function() {
+                if (!self.gameMessageEl) return;
+
+                if (gameMessageClearTimeout) {
+                        clearTimeout(gameMessageClearTimeout);
+                        gameMessageClearTimeout = null;
+                }
+
+                self.gameMessageEl.innerHTML = '<h2>Game Over</h2><p>Try again?</p>';
+                self.gameMessageEl.classList.remove('idle');
+                self.gameMessageEl.classList.add('active', 'gameover');
+        };
+
+        this.scheduleGameMessageClear = function() {
+                if (!self.gameMessageEl) return;
+
+                if (gameMessageClearTimeout) {
+                        clearTimeout(gameMessageClearTimeout);
+                }
+
+                gameMessageClearTimeout = setTimeout(function() {
+                        self.gameMessageEl.classList.remove('active', 'gameover');
+                        self.gameMessageEl.classList.add('idle');
+                        self.gameMessageEl.innerHTML = defaultGameMessage || '<h2>PRESS START</h2><p>Ready to play?</p>';
+                        gameMessageClearTimeout = null;
+                }, 5000);
+        };
+
+        // --- CORE GAME LOOP ---
 
         this.start = function() {
                 if (self.puzzle && !confirm('¿Nueva partida?')) return;
                 self.updateResponsiveUnit();
                 self.reset();
+
+                if (typeof self.scheduleGameMessageClear === 'function') {
+                        self.scheduleGameMessageClear();
+                }
 
 		if (window.bot) {
 			window.bot.enabled = !!self.isIAAssist; // Mantener estado si ya estaba activo
@@ -463,9 +499,13 @@ function Tetris()
         this.gameOver = function() {
                 self.stats.stop();
                 if (self.puzzle) self.puzzle.stop();
-		
-		document.getElementById("tetris-nextpuzzle").style.display = "none";
-		document.getElementById("tetris-gameover").style.display = "block";
+
+                if (typeof self.showGameOverMessage === 'function') {
+                        self.showGameOverMessage();
+                }
+
+                document.getElementById("tetris-nextpuzzle").style.display = "none";
+                document.getElementById("tetris-gameover").style.display = "block";
 		
 		if (this.highscores.mayAdd(self.stats.getScore())) {
 			var name = prompt("Game Over! Tu nombre:", "");
@@ -1805,16 +1845,20 @@ function TetrisBot(tetrisInstance) {
         this.modeProfiles[GamePlayMode.ZEN] = { holes: 1.0, roughness: 1.0, chimney: 1.0, maxHeight: 1.0, aggHeight: 1.0 };
         this.modeProfiles[GamePlayMode.BALANCED] = { holes: 1.0, roughness: 1.0, chimney: 1.0, maxHeight: 1.0, aggHeight: 1.0 };
 
-        // CONFIGURACIÓN DE HEURÍSTICA
-        // Estos pesos definen la personalidad del bot.
+        // CONFIGURACIÓN DE HEURÍSTICA (Minimización de Costo)
+        // Penalidades (POSITIVO = MALO)
+        // Recompensas (NEGATIVO = BUENO, se restan del score)
         const baseWeights = {
-                lines: 4.0, // Recompensa: prioriza limpiar líneas (Tetris = 16pts)
-                holes: -1.0, // Penalidad: ponderación base para huecos por altura
-                roughness: -0.1, // Penalidad: rugosidad ponderada por ocupación
-                aggHeight: -0.5, // Penalidad: altura agregada ponderada por diferencia de borde
-                maxHeight: -2.0 // Penalidad: seguridad contra picos altos
+                lines: 800.0,      // Recompensa por línea (¡Muy alta para motivar limpieza!)
+                holes: 1500.0,     // Penalidad extrema por huecos inaccesibles
+                roughness: 60.0,   // Penalidad por superficie irregular (evita picos/valles)
+                chimney: 250.0,    // Penalidad por pozos profundos (chimeneas)
+                aggHeight: 25.0,   // Penalidad por altura acumulada
+                maxHeight: 40.0,   // Penalidad extra si una columna está muy alta
+                blocked: 999999.0  // Penalidad de muerte inminente
         };
-
+        
+        // Inicializamos los pesos con la base
         this.weights = Object.assign({}, baseWeights);
 
 var self = this;
@@ -1858,12 +1902,15 @@ this.setGameplayMode = function(mode) {
         var profile = self.modeProfiles[mode] || self.modeProfiles[GamePlayMode.BALANCED];
         if (profile) {
                 self.weights = {
-                        lines: baseWeights.lines,
-                        holes: baseWeights.holes * profile.holes,
-                        roughness: baseWeights.roughness * profile.roughness,
-                        aggHeight: baseWeights.aggHeight * profile.aggHeight,
-                        maxHeight: baseWeights.maxHeight * profile.maxHeight
+                        lines: baseWeights.lines, // Las líneas siempre valen lo mismo
+                        holes: baseWeights.holes * (profile.holes || 1.0),
+                        roughness: baseWeights.roughness * (profile.roughness || 1.0),
+                        chimney: baseWeights.chimney * (profile.chimney || 1.0),
+                        aggHeight: baseWeights.aggHeight * (profile.aggHeight || 1.0),
+                        maxHeight: baseWeights.maxHeight * (profile.maxHeight || 1.0),
+                        blocked: baseWeights.blocked
                 };
+                console.log("[BOT] Nuevos pesos aplicados:", self.weights);
         }
 
         updateBotStrategyUI(self.activeBotModeName);
@@ -2306,26 +2353,22 @@ this.calculateBestMove = function() {
 };
 
 this.evaluateGrid = function(grid, linesCleared) {
-    const ROWS = self.tetris.areaY; // 22
-    const COLS = self.tetris.areaX; // 12
+    const ROWS = self.tetris.areaY;
+    const COLS = self.tetris.areaX;
 
     let heights = new Array(COLS).fill(0);
     let aggregateHeight = 0;
     let maxHeight = 0;
-
     let holes = 0;
-    let holeDepthSum = 0;
-    let closedHoles = 0;
-
+    let closedHoles = 0; // Huecos tapados por bloques (muy malos)
     let roughness = 0;
-    let wells = 0;
-    let topRowsOccupied = 0;
+    let wells = 0; // Chimeneas
 
-    // --- ALTURAS Y AGUJEROS ---
+    // 1. Análisis de Columnas (Alturas y Huecos)
     for (let x = 0; x < COLS; x++) {
-        let blockFound = false;
         let colHeight = 0;
-
+        let blockFound = false;
+        
         for (let y = 0; y < ROWS; y++) {
             if (grid[y][x]) {
                 if (!blockFound) {
@@ -2333,79 +2376,57 @@ this.evaluateGrid = function(grid, linesCleared) {
                     blockFound = true;
                 }
             } else if (blockFound) {
+                // Es un hueco porque hay un bloque encima
                 holes++;
-                holeDepthSum += (ROWS - y);
+                // Si además tiene bloques a izquierda Y derecha (o pared), es un hueco cerrado (cueva)
+                let leftBlocked = (x === 0) || (grid[y][x-1]);
+                let rightBlocked = (x === COLS - 1) || (grid[y][x+1]);
+                if (leftBlocked && rightBlocked) closedHoles++;
             }
         }
-
         heights[x] = colHeight;
         aggregateHeight += colHeight;
         if (colHeight > maxHeight) maxHeight = colHeight;
     }
 
-    // --- AGUJEROS CERRADOS (CAVES) ---
-    for (let y = 1; y < ROWS - 1; y++) {
-        for (let x = 0; x < COLS; x++) {
-            if (!grid[y][x] && grid[y - 1][x] && grid[y + 1][x]) {
-                closedHoles++;
-            }
-        }
+    // 2. Cálculo de Rugosidad (Diferencia de altura entre columnas adyacentes)
+    for (let x = 0; x < COLS - 1; x++) {
+        roughness += Math.abs(heights[x] - heights[x + 1]);
     }
 
-    // --- RUGOSIDAD ---
-    for (let i = 0; i < COLS - 1; i++) {
-        roughness += Math.abs(heights[i] - heights[i + 1]);
-    }
-
-    // --- POZOS / CHIMENEAS ---
+    // 3. Identificación de Pozos (Chimeneas)
+    // Un pozo es una columna significativamente más baja que sus vecinas
     for (let x = 0; x < COLS; x++) {
-        let left = (x === 0) ? ROWS : heights[x - 1];
-        let right = (x === COLS - 1) ? ROWS : heights[x + 1];
-        let wellDepth = Math.min(left, right) - heights[x];
-        if (wellDepth >= 3) {
-            wells += wellDepth;
+        let leftH = (x === 0) ? 999 : heights[x - 1];
+        let rightH = (x === COLS - 1) ? 999 : heights[x + 1];
+        let minNeighbor = Math.min(leftH, rightH);
+        
+        // Si la columna es más baja que sus vecinas por al menos 2 bloques, es un pozo peligroso
+        if (heights[x] < minNeighbor - 2) {
+            wells += (minNeighbor - heights[x]); 
         }
     }
 
-    // --- OCUPACIÓN EN ZONA SPAWN (FILAS SUPERIORES) ---
-    for (let y = 0; y < 4; y++) {
-        for (let x = 0; x < COLS; x++) {
-            if (grid[y][x]) topRowsOccupied++;
-        }
-    }
-
-    // --- FUNCIÓN DE COSTO (CONSERVADORA) ---
+    // --- CÁLCULO FINAL DEL SCORE (Usando this.weights) ---
     let score = 0;
+    
+    // Penalidades (Suman costo)
+    score += holes * self.weights.holes;
+    score += closedHoles * (self.weights.holes * 2); // Penalidad doble para huecos cerrados
+    score += roughness * self.weights.roughness;
+    score += wells * self.weights.chimney;
+    score += aggregateHeight * self.weights.aggHeight;
+    score += (maxHeight * maxHeight) * (self.weights.maxHeight / 10); // Exponencial suave
 
-    // Huecos (enemigo principal)
-    score += closedHoles * 5000;
-    score += holeDepthSum * 120;
-    score += holes * 800;
-
-    // Riesgo de muerte
-    score += topRowsOccupied * 3000;
-    score += Math.pow(maxHeight, 2) * 25;
-
-    // Estructura
-    score += wells * 300;
-    score += aggregateHeight * 20;
-    score += roughness * 15;
-
-    // Bonus pequeño por limpieza segura
+    // Recompensas (Restan costo)
     if (linesCleared > 0) {
-        score -= linesCleared * 200;
+        score -= linesCleared * self.weights.lines;
     }
 
     return {
-        score,
-        maxHeight,
-        aggregateHeight,
-        holes,
-        holeDepthSum,
-        closedHoles,
-        roughness,
-        wells,
-        topRowsOccupied
+        score: score,
+        holes: holes,
+        maxHeight: maxHeight // Necesario para la lógica dinámica de autoevaluación
     };
 };
 
@@ -2695,12 +2716,8 @@ document.addEventListener('DOMContentLoaded', function() {
         playBtn.addEventListener('click', function() {
             console.log('[UI] ▶ Botón PLAY presionado');
             window.tetris.start();
-            // Actualizar mensaje del juego
-            var gameMessage = document.getElementById('gameMessage');
-            if (gameMessage) {
-                gameMessage.innerHTML = '<h2>¡JUEGO ACTIVO!</h2><p>Usa las flechas para mover</p>';
-                gameMessage.classList.remove('idle');
-                gameMessage.classList.add('active');
+            if (window.tetris && typeof window.tetris.scheduleGameMessageClear === 'function') {
+                window.tetris.scheduleGameMessageClear();
             }
         });
     }
