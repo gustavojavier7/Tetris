@@ -1861,12 +1861,12 @@ function TetrisBot(tetrisInstance) {
         // Penalidades (POSITIVO = MALO)
         // Recompensas (NEGATIVO = BUENO, se restan del score)
         const baseWeights = {
-                lines: 800.0,      // Recompensa por línea (¡Muy alta para motivar limpieza!)
+                lines: 1800.0,      // Recompensa por línea (¡Muy alta para motivar limpieza!)
                 holes: 1500.0,     // Penalidad extrema por huecos inaccesibles
-                roughness: 60.0,   // Penalidad por superficie irregular (evita picos/valles)
-                chimney: 250.0,    // Penalidad por pozos profundos (chimeneas)
-                aggHeight: 25.0,   // Penalidad por altura acumulada
-                maxHeight: 40.0,   // Penalidad extra si una columna está muy alta
+                roughness: 600.0,   // Penalidad por superficie irregular (evita picos/valles)
+                chimney: 500.0,    // Penalidad por pozos profundos (chimeneas)
+                aggHeight: 250.0,   // Penalidad por altura acumulada
+                maxHeight: 400.0,   // Penalidad extra si una columna está muy alta
                 blocked: 999999.0  // Penalidad de muerte inminente
         };
         
