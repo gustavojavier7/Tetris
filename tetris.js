@@ -2172,24 +2172,26 @@ this.executeMoveSmoothly = function(move) {
 
                 if (candidates.length === 0) return null;
 
-                const hasCaveFree = candidates.some(c => c.cavesCreated === 0);
-                const evaluableMoves = hasCaveFree ? candidates.filter(c => c.cavesCreated === 0) : candidates;
+                function scoreMove(move) {
+                        // Ponderación holística: evita filtros rígidos y permite que la
+                        // gravedad (landingY) compense penalizaciones pequeñas por huecos.
+                        return (
+                                (move.linesCleared * 50) +
+                                (move.landingY * 8) -
+                                (move.holes * 30) -
+                                (move.depth * 10) -
+                                (move.cavesCreated * 200)
+                        );
+                }
 
                 let bestCandidate = null;
                 let bestScore = -Infinity;
 
-                for (let i = 0; i < evaluableMoves.length; i++) {
-                        const move = evaluableMoves[i];
-                        const cavePenalty = hasCaveFree ? 0 : move.cavesCreated * 10000;
+                for (let i = 0; i < candidates.length; i++) {
+                        const move = candidates[i];
+                        const score = scoreMove(move);
 
-                        const score =
-                                (move.linesCleared * 50) +
-                                (move.landingY * 5) -
-                                (move.holes * 200) -
-                                (move.depth * 10) -
-                                cavePenalty;
-
-                        if (score > bestScore || (score === bestScore && move.x < bestCandidate.x)) {
+                        if (!bestCandidate || score > bestScore || (score === bestScore && move.x < bestCandidate.x)) {
                                 bestScore = score;
                                 bestCandidate = move;
                         }
