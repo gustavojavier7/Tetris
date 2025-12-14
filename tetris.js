@@ -2275,7 +2275,8 @@ this.executeMoveSmoothly = function(move) {
                                         x,
                                         holesCreated,
                                         holesAfter,
-                                        linesCleared: sim.linesCleared
+                                        linesCleared: sim.linesCleared,
+                                        landingY: sim.finalY
                                 });
                         }
                 }
@@ -2290,11 +2291,15 @@ this.executeMoveSmoothly = function(move) {
                 let maxLines = Math.max(...candidates.map(c => c.linesCleared));
                 candidates = candidates.filter(c => c.linesCleared === maxLines);
 
-                // 4️⃣ FILTRO 3: minimizar huecos totales
+                // 4️⃣ FILTRO 3: aterrizar lo más abajo posible
+                let maxLandingY = Math.max(...candidates.map(c => c.landingY));
+                candidates = candidates.filter(c => c.landingY === maxLandingY);
+
+                // 5️⃣ FILTRO 4: minimizar huecos totales
                 let minTotalHoles = Math.min(...candidates.map(c => c.holesAfter));
                 candidates = candidates.filter(c => c.holesAfter === minTotalHoles);
 
-                // 5️⃣ Desempate determinista (opcional)
+                // 6️⃣ Desempate determinista (opcional)
                 // Elegimos la más a la izquierda para estabilidad visual
                 candidates.sort((a, b) => a.x - b.x);
 
