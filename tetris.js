@@ -342,6 +342,11 @@ function Tetris()
                         gameMessageClearTimeout = null;
                 }
 
+                // Asegurar que las estadísticas no sigan contando tras un Game Over visible.
+                if (self.stats) {
+                        self.stats.stop();
+                }
+
                 self.gameMessageEl.style.display = '';
                 self.gameMessageEl.innerHTML = '<h2>Game Over</h2>';
                 self.gameMessageEl.classList.remove('idle');
@@ -2140,10 +2145,18 @@ this.executeMoveSmoothly = function(move) {
 this.simulateDrop = function(rotation, targetX) {
         console.log("[BOT][SIM-DROP] Testing rotation=", rotation, "x=", targetX);
 
-        function logResult(result) {
-                console.log("[BOT][SIM-DROP] Result: isValid=", result.isValid,
-                        "finalX=", result.finalX, "finalY=", result.finalY);
+        function normalizeLanding(result) {
+                // Garantizar que landingY siempre exista y coincida con finalY para evitar
+                // discrepancias sutiles en los consumidores de la simulación.
+                result.landingY = result.finalY;
                 return result;
+        }
+
+        function logResult(result) {
+                const normalized = normalizeLanding(result);
+                console.log("[BOT][SIM-DROP] Result: isValid=", normalized.isValid,
+                        "finalX=", normalized.finalX, "finalY=", normalized.finalY);
+                return normalized;
         }
 
         if (!self.tetris || !self.tetris.area) {
