@@ -1828,111 +1828,29 @@ function TetrisBot(tetrisInstance) {
         this.predictedBoard = null; // Tablero proyectado (dual-state)
         this.bestBotMove = null; // Movimiento óptimo pendiente de ejecutar
         this.ghostElements = []; // Previsualización de la jugada del bot
-        this.currentBotStrategy = 'BALANCED';
 
-        // --- MODOS DE JUEGO (FAST-FAIL EN VALIDACIONES) ---
-        const GamePlayMode = {
-                SURVIVAL: 1,
-                TETRIS_BUILDER: 2,
-                PRO_ATTACK: 3,
-                ZEN: 4,
-                BALANCED: 5
+        const DEFAULT_STRATEGY = 'BALANCED';
+
+        var self = this;
+
+        // --- UTILIDADES DE MODO ---
+
+        this.getModeName = function() {
+                return DEFAULT_STRATEGY;
         };
 
-        var GAMEPLAY_MODE_NAMES = {};
-        GAMEPLAY_MODE_NAMES[GamePlayMode.SURVIVAL] = "SURVIVAL";
-        GAMEPLAY_MODE_NAMES[GamePlayMode.TETRIS_BUILDER] = "TETRIS_BUILDER";
-        GAMEPLAY_MODE_NAMES[GamePlayMode.PRO_ATTACK] = "PRO_ATTACK";
-        GAMEPLAY_MODE_NAMES[GamePlayMode.ZEN] = "ZEN";
-        GAMEPLAY_MODE_NAMES[GamePlayMode.BALANCED] = "BALANCED";
+        this.setGameplayMode = function() {
+                self.gameplayMode = DEFAULT_STRATEGY;
+                self.activeBotModeName = DEFAULT_STRATEGY;
 
-        this.GamePlayMode = GamePlayMode;
-        this.gameplayMode = GamePlayMode.ZEN;
+                updateBotStrategyUI(self.activeBotModeName);
 
-        // Perfiles de pesos por modo (mantener BALANCED igual al comportamiento actual)
-        this.modeProfiles = {};
-        this.modeProfiles[GamePlayMode.SURVIVAL] = { holes: 1.35, roughness: 1.0, chimney: 0.8, maxHeight: 1.4, aggHeight: 1.2 };
-        this.modeProfiles[GamePlayMode.TETRIS_BUILDER] = { holes: 0.95, roughness: 1.1, chimney: 1.3, maxHeight: 0.95, aggHeight: 1.0 };
-        this.modeProfiles[GamePlayMode.PRO_ATTACK] = { holes: 1.1, roughness: 1.25, chimney: 1.1, maxHeight: 1.0, aggHeight: 0.9 };
-        this.modeProfiles[GamePlayMode.ZEN] = { holes: 1.0, roughness: 1.0, chimney: 1.0, maxHeight: 1.0, aggHeight: 1.0 };
-        this.modeProfiles[GamePlayMode.BALANCED] = { holes: 1.0, roughness: 1.0, chimney: 1.0, maxHeight: 1.0, aggHeight: 1.0 };
+                if (self.tetris && self.tetris.updateModeStatus) {
+                        self.tetris.updateModeStatus();
+                }
 
-        // CONFIGURACIÓN DE HEURÍSTICA (Minimización de Costo)
-        // Penalidades (POSITIVO = MALO)
-        // Recompensas (NEGATIVO = BUENO, se restan del score)
-        const baseWeights = {
-                lines: 1800.0,      // Recompensa por línea (¡Muy alta para motivar limpieza!)
-                holes: 1500.0,     // Penalidad extrema por huecos inaccesibles
-                roughness: 600.0,   // Penalidad por superficie irregular (evita picos/valles)
-                chimney: 500.0,    // Penalidad por pozos profundos (chimeneas)
-                aggHeight: 250.0,   // Penalidad por altura acumulada
-                maxHeight: 400.0,   // Penalidad extra si una columna está muy alta
-                blocked: 999999.0  // Penalidad de muerte inminente
-        };
-        
-        // Inicializamos los pesos con la base
-        this.weights = Object.assign({}, baseWeights);
-
-var self = this;
-
-// --- CONTROL DE MODO AUTOMÁTICO ---
-// El modo automático permite que la IA seleccione el perfil de juego según la altura crítica del tablero.
-let autoMode = true;         // IA decide modo dinámico
-let manualModeOverride = false;  // Usuario cambia modo
-let lastAutoMode = self.gameplayMode; // Persistencia para histeresis
-
-var autoModeToggle = document.getElementById("auto-mode-toggle");
-if (autoModeToggle) {
-        autoModeToggle.checked = autoMode;
-        autoModeToggle.addEventListener("change", function() {
-                autoMode = this.checked;
-                manualModeOverride = !this.checked;
-
-                // Silenciado: logs informativos
-        });
-} else {
         // Silenciado
-}
-
-// --- UTILIDADES DE MODO ---
-
-this.getModeName = function(mode) {
-        return GAMEPLAY_MODE_NAMES[mode] || "DESCONOCIDO";
-};
-
-this.setGameplayMode = function(mode) {
-        if (!GAMEPLAY_MODE_NAMES[mode]) {
-                return;
-        }
-
-        self.gameplayMode = mode;
-        lastAutoMode = mode;
-
-        self.activeBotModeName = self.getModeName(mode);
-        self.currentBotStrategy = self.activeBotModeName;
-
-        var profile = self.modeProfiles[mode] || self.modeProfiles[GamePlayMode.BALANCED];
-        if (profile) {
-                self.weights = {
-                        lines: baseWeights.lines, // Las líneas siempre valen lo mismo
-                        holes: baseWeights.holes * (profile.holes || 1.0),
-                        roughness: baseWeights.roughness * (profile.roughness || 1.0),
-                        chimney: baseWeights.chimney * (profile.chimney || 1.0),
-                        aggHeight: baseWeights.aggHeight * (profile.aggHeight || 1.0),
-                        maxHeight: baseWeights.maxHeight * (profile.maxHeight || 1.0),
-                        blocked: baseWeights.blocked
-                };
-                console.log("[BOT] Nuevos pesos aplicados:", self.weights);
-        }
-
-        updateBotStrategyUI(self.activeBotModeName);
-
-        if (self.tetris && self.tetris.updateModeStatus) {
-                self.tetris.updateModeStatus();
-        }
-
-// Silenciado
-};
+        };
 
 // --- PREVISUALIZACIÓN DE LA JUGADA DEL BOT ---
 
@@ -1978,97 +1896,8 @@ this.renderGhostPreview = function(move) {
         }
 };
 
-function calculateMaxHeightRatio(grid) {
-        if (!grid || !grid.length || !grid[0].length) {
-                return 1;
-        }
-
-        var totalRows = grid.length;
-        var totalCols = grid[0].length;
-        var highest = 0;
-
-        for (var x = 0; x < totalCols; x++) {
-                var colHeight = 0;
-                var found = false;
-
-                for (var y = 0; y < totalRows; y++) {
-                        if (grid[y][x] !== 0) {
-                                colHeight = totalRows - y;
-                                found = true;
-                                break;
-                        }
-                }
-
-                if (found && colHeight > highest) {
-                        highest = colHeight;
-                }
-        }
-
-        return highest / totalRows;
-}
-
-function getEffectiveBotStrategy(state) {
-        const h = state.maxHeightRatio;
-        const occ = state.occupiedCellsRatio;
-
-        if (h > 0.72 || occ > 0.85) return 'SURVIVAL';
-        if (h < 0.45 && occ < 0.60) return 'TETRIS_BUILDER';
-        if (h >= 0.45 && h <= 0.65 && occ < 0.75) return 'PRO_ATTACK';
-
-        return 'BALANCED';
-}
-
-function getActiveMode(grid) {
-        if (manualModeOverride || !autoMode) {
-                return self.gameplayMode;
-        }
-
-        var maxHeightRatio = calculateMaxHeightRatio(grid);
-        var thresholds = {
-                PRO_ATTACK: 0.20,
-                TETRIS_BUILDER: 0.45,
-                SURVIVAL: 0.70
-        };
-
-        var candidate;
-
-        if (maxHeightRatio <= thresholds.PRO_ATTACK) {
-                candidate = GamePlayMode.PRO_ATTACK;
-        } else if (maxHeightRatio <= thresholds.TETRIS_BUILDER) {
-                candidate = GamePlayMode.TETRIS_BUILDER;
-        } else if (maxHeightRatio <= thresholds.SURVIVAL) {
-                candidate = GamePlayMode.SURVIVAL;
-        } else {
-                candidate = GamePlayMode.ZEN;
-        }
-
-        // --- HISTERESIS PARA EVITAR OSCILACIONES ---
-        var hysteresisGap = 0.05;
-
-        if (lastAutoMode === GamePlayMode.ZEN && candidate !== GamePlayMode.ZEN) {
-                if (maxHeightRatio > (thresholds.SURVIVAL - hysteresisGap)) {
-                        return lastAutoMode;
-                }
-        }
-
-        if (lastAutoMode === GamePlayMode.SURVIVAL && candidate === GamePlayMode.TETRIS_BUILDER) {
-                if (maxHeightRatio > (thresholds.TETRIS_BUILDER - hysteresisGap)) {
-                        return lastAutoMode;
-                }
-        }
-
-        if (lastAutoMode === GamePlayMode.TETRIS_BUILDER && candidate === GamePlayMode.PRO_ATTACK) {
-                if (maxHeightRatio > (thresholds.PRO_ATTACK - hysteresisGap)) {
-                        return lastAutoMode;
-                }
-        }
-
-        lastAutoMode = candidate;
-        return candidate;
-}
-
 // Inicializar indicador en el modo predeterminado
-this.setGameplayMode(this.gameplayMode);
+this.setGameplayMode();
 
 // --- CONTROL PÚBLICO ---
 
@@ -2307,129 +2136,6 @@ this.executeMoveSmoothly = function(move) {
                 return best ? { rotation: best.rotation, x: best.x } : null;
         };
 
- this.evaluateGrid = function(grid, linesCleared, currentWeights) {
-     const ROWS = self.tetris.areaY;
-     const COLS = self.tetris.areaX;
-
-     const weights = currentWeights || self.weights;
-
-    let heights = new Array(COLS).fill(0);
-    let aggregateHeight = 0;
-    let maxHeight = 0;
-    let holes = 0;
-    let closedHoles = 0; // Huecos tapados por bloques (muy malos)
-    let roughness = 0;
-    let wells = 0; // Chimeneas
-
-    // 1. Análisis de Columnas (Alturas y Huecos)
-    for (let x = 0; x < COLS; x++) {
-        let colHeight = 0;
-        let blockFound = false;
-        
-        for (let y = 0; y < ROWS; y++) {
-            if (grid[y][x]) {
-                if (!blockFound) {
-                    colHeight = ROWS - y;
-                    blockFound = true;
-                }
-            } else if (blockFound) {
-                // Es un hueco porque hay un bloque encima
-                holes++;
-                // Si además tiene bloques a izquierda Y derecha (o pared), es un hueco cerrado (cueva)
-                let leftBlocked = (x === 0) || (grid[y][x-1]);
-                let rightBlocked = (x === COLS - 1) || (grid[y][x+1]);
-                if (leftBlocked && rightBlocked) closedHoles++;
-            }
-        }
-        heights[x] = colHeight;
-        aggregateHeight += colHeight;
-        if (colHeight > maxHeight) maxHeight = colHeight;
-    }
-
-    // 2. Cálculo de Rugosidad (Diferencia de altura entre columnas adyacentes)
-    for (let x = 0; x < COLS - 1; x++) {
-        roughness += Math.abs(heights[x] - heights[x + 1]);
-    }
-
-    // 3. Identificación de Pozos (Chimeneas)
-    // Un pozo es una columna significativamente más baja que sus vecinas
-    for (let x = 0; x < COLS; x++) {
-        let leftH = (x === 0) ? 999 : heights[x - 1];
-        let rightH = (x === COLS - 1) ? 999 : heights[x + 1];
-        let minNeighbor = Math.min(leftH, rightH);
-        
-        // Si la columna es más baja que sus vecinas por al menos 2 bloques, es un pozo peligroso
-        if (heights[x] < minNeighbor - 2) {
-            wells += (minNeighbor - heights[x]); 
-        }
-    }
-
-    // --- CÁLCULO FINAL DEL SCORE (Usando currentWeights) ---
-    let score = 0;
-
-    // Penalidades (Suman costo)
-    score += holes * weights.holes;
-    score += closedHoles * (weights.holes * 2); // Penalidad doble para huecos cerrados
-    score += roughness * weights.roughness;
-    score += wells * weights.chimney;
-    score += aggregateHeight * weights.aggHeight;
-    score += (maxHeight * maxHeight) * (weights.maxHeight / 10); // Exponencial suave
-
-    // Recompensas (Restan costo)
-    if (linesCleared > 0) {
-        score -= linesCleared * weights.lines;
-    }
-
-    return {
-        score: score,
-        holes: holes,
-        maxHeight: maxHeight // Necesario para la lógica dinámica de autoevaluación
-    };
-};
-
-
-function simulateNextPiece(baseGrid, nextPiece) {
-        if (!nextPiece || !nextPiece.length || !baseGrid || !baseGrid.length) {
-                // Fast fail: sin pieza futura o tablero inválido, no hay lookahead.
-                return null;
-        }
-
-        var candidateScore = null;
-        var rotatedPiece = nextPiece;
-
-        // Probar las 4 rotaciones posibles.
-        for (var r = 0; r < 4; r++) {
-                if (r > 0) {
-                        rotatedPiece = rotateGrid(rotatedPiece);
-                }
-
-                var pieceWidth = rotatedPiece[0].length;
-                var maxX = self.tetris.areaX - pieceWidth;
-
-                for (var x = 0; x <= maxX; x++) {
-                        // Si no cabe en la fila superior, intentar siguiente posición.
-                        if (!isPositionValid(rotatedPiece, x, 0, baseGrid)) { continue; }
-
-                        var dropY = 0;
-                        while (isPositionValid(rotatedPiece, x, dropY + 1, baseGrid)) {
-                                dropY++;
-                        }
-
-                        var merged = mergePiece(baseGrid, rotatedPiece, x, dropY);
-                        var cleared = clearFullLines(merged);
-                        var evaluation = self.evaluateGrid(cleared.grid, cleared.lines, self.weights);
-
-                        if (!evaluation) { continue; }
-
-                        if (candidateScore === null || evaluation.score < candidateScore) {
-                                candidateScore = evaluation.score;
-                        }
-                }
-        }
-
-        return candidateScore;
-}
-
 // --- SIMULACIÓN FÍSICA ---
 this.simulateDrop = function(rotation, targetX) {
         console.log("[BOT][SIM-DROP] Testing rotation=", rotation, "x=", targetX);
@@ -2623,51 +2329,6 @@ function buildPredictedBoard() {
                 return { grid: newGrid, lines: cleared };
         }
 
-        // Predicción de la siguiente pieza para desempatar decisiones (lookahead ligero)
-        this.simulateNextPiece = function(grid, nextPiece, weights) {
-                if (!grid || !nextPiece) return 0;
-
-                let bestNextScore = Infinity;
-                const COLS = self.tetris.areaX;
-
-                // Copia para rotaciones
-                let rotatedPiece = nextPiece; // Asume array de arrays (estructura pura)
-
-                // OPTIMIZACIÓN: Solo 2 rotaciones y pasos de 2 columnas
-                for (let r = 0; r < 2; r++) {
-                        if (r > 0) rotatedPiece = rotateGrid(rotatedPiece);
-
-                        let pieceWidth = rotatedPiece[0].length;
-
-                        for (let x = 0; x <= COLS - pieceWidth; x += 2) {
-                                // 1. Validar posición inicial
-                                if (!isPositionValid(rotatedPiece, x, 0, grid)) continue;
-
-                                // 2. Caída rápida (Hard Drop virtual)
-                                let dropY = 0;
-                                while (isPositionValid(rotatedPiece, x, dropY + 1, grid)) {
-                                        dropY++;
-                                }
-
-                                // 3. Fusión y limpieza
-                                let merged = mergePiece(grid, rotatedPiece, x, dropY);
-                                let cleared = clearFullLines(merged);
-
-                                // 4. Evaluación rápida
-                                // Nota: Pasamos 'weights' para mantener coherencia con la estrategia actual
-                                let evalResult = self.evaluateGrid(cleared.grid, cleared.lines, weights);
-
-                                if (evalResult.score < bestNextScore) {
-                                        bestNextScore = evalResult.score;
-                                }
-                        }
-                }
-
-                if (bestNextScore === Infinity) return 0;
-
-                // Retornamos solo el 30% del score futuro para no opacar el presente
-                return bestNextScore * 0.3;
-        };
 }
 
 function updateBotStrategyUI(strategy) {
@@ -2763,23 +2424,6 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Feedback visual inmediato
             this.classList.toggle('active', !currentZen);
-        });
-    }
-    
-    // 🎮 Selector de estrategia del bot
-    var botModeSelect = document.getElementById('botMode');
-    if (botModeSelect && window.bot) {
-        botModeSelect.addEventListener('change', function() {
-            var mode = this.value;
-            console.log('[UI] 🧠 Estrategia del bot cambiada a:', mode);
-            
-            if (window.bot && window.bot.setGameplayMode) {
-                // Convertir string (ej: "SURVIVAL") a constante del enum
-                var modeEnum = window.bot.GamePlayMode[mode];
-                if (modeEnum) {
-                    window.bot.setGameplayMode(modeEnum);
-                }
-            }
         });
     }
     
