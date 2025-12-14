@@ -2083,32 +2083,87 @@ this.executeMoveSmoothly = function(move) {
                 return holes;
         }
 
+        function countCaves(grid) {
+                let caves = 0;
+                const rows = grid.length;
+                const cols = grid[0].length;
+
+                for (let y = 0; y < rows; y++) {
+                        for (let x = 0; x < cols; x++) {
+                                if (grid[y][x]) continue;
+
+                                let hasLeftWall = false;
+                                for (let lx = x - 1; lx >= 0; lx--) {
+                                        if (grid[y][lx]) { hasLeftWall = true; break; }
+                                }
+
+                                if (!hasLeftWall) continue;
+
+                                let hasRightWall = false;
+                                for (let rx = x + 1; rx < cols; rx++) {
+                                        if (grid[y][rx]) { hasRightWall = true; break; }
+                                }
+
+                                if (!hasRightWall) continue;
+
+                                const blockedAbove = (y === 0) || !!grid[y - 1][x];
+                                if (blockedAbove) {
+                                        caves++;
+                                }
+                        }
+                }
+
+                return caves;
+        }
+
+        function holeDepthSum(grid) {
+                let depthSum = 0;
+                const rows = grid.length;
+                const cols = grid[0].length;
+
+                for (let x = 0; x < cols; x++) {
+                        let filledAbove = 0;
+                        for (let y = 0; y < rows; y++) {
+                                if (grid[y][x]) {
+                                        filledAbove++;
+                                } else if (filledAbove > 0) {
+                                        depthSum += filledAbove;
+                                }
+                        }
+                }
+
+                return depthSum;
+        }
+
         this.calculateBestMove = function () {
 
                 const area = self.tetris.area;
                 const puzzle = self.tetris.puzzle;
                 if (!area || !puzzle) return null;
 
-                const initialGrid = cloneAreaGrid(area.board);
-                const holesBefore = countHoles(initialGrid);
+                const baseGrid = cloneAreaGrid(area.board);
+                const baseCaves = countCaves(baseGrid);
 
                 let candidates = [];
 
-                // 1️⃣ Simular TODAS las jugadas posibles
                 for (let rotation = 0; rotation < 4; rotation++) {
                         for (let x = 0; x < self.tetris.areaX; x++) {
 
                                 const sim = self.simulateDrop(rotation, x);
                                 if (!sim.isValid) continue;
 
-                                const holesAfter = countHoles(sim.grid);
-                                const holesCreated = holesAfter - holesBefore;
+                                const grid = sim.grid;
+                                const holes = countHoles(grid);
+                                const depth = holeDepthSum(grid);
+                                const caves = countCaves(grid);
+                                const cavesCreated = Math.max(0, caves - baseCaves);
 
                                 candidates.push({
                                         rotation,
                                         x,
-                                        holesCreated,
-                                        holesAfter,
+                                        holes,
+                                        depth,
+                                        cavesCreated,
                                         linesCleared: sim.linesCleared,
                                         landingY: sim.finalY
                                 });
@@ -2117,28 +2172,32 @@ this.executeMoveSmoothly = function(move) {
 
                 if (candidates.length === 0) return null;
 
-                // 2️⃣ FILTRO 1: minimizar huecos creados
-                let minHolesCreated = Math.min(...candidates.map(c => c.holesCreated));
-                candidates = candidates.filter(c => c.holesCreated === minHolesCreated);
+                const hasCaveFree = candidates.some(c => c.cavesCreated === 0);
+                const evaluableMoves = hasCaveFree ? candidates.filter(c => c.cavesCreated === 0) : candidates;
 
-                // 3️⃣ FILTRO 2: maximizar líneas limpiadas
-                let maxLines = Math.max(...candidates.map(c => c.linesCleared));
-                candidates = candidates.filter(c => c.linesCleared === maxLines);
+                let bestCandidate = null;
+                let bestScore = -Infinity;
 
-                // 4️⃣ FILTRO 3: aterrizar lo más abajo posible
-                let maxLandingY = Math.max(...candidates.map(c => c.landingY));
-                candidates = candidates.filter(c => c.landingY === maxLandingY);
+                for (let i = 0; i < evaluableMoves.length; i++) {
+                        const move = evaluableMoves[i];
+                        const cavePenalty = hasCaveFree ? 0 : move.cavesCreated * 10000;
 
-                // 5️⃣ FILTRO 4: minimizar huecos totales
-                let minTotalHoles = Math.min(...candidates.map(c => c.holesAfter));
-                candidates = candidates.filter(c => c.holesAfter === minTotalHoles);
+                        const score =
+                                (move.linesCleared * 50) +
+                                (move.landingY * 5) -
+                                (move.holes * 200) -
+                                (move.depth * 10) -
+                                cavePenalty;
 
-                // 6️⃣ Desempate determinista (opcional)
-                // Elegimos la más a la izquierda para estabilidad visual
-                candidates.sort((a, b) => a.x - b.x);
+                        if (score > bestScore || (score === bestScore && move.x < bestCandidate.x)) {
+                                bestScore = score;
+                                bestCandidate = move;
+                        }
+                }
 
-                const best = candidates[0];
-                return best ? { rotation: best.rotation, x: best.x } : null;
+                if (!bestCandidate) return null;
+
+                return { rotation: bestCandidate.rotation, x: bestCandidate.x };
         };
 
 // --- SIMULACIÓN FÍSICA ---
