@@ -2276,24 +2276,35 @@ this.executeMoveSmoothly = function(move) {
      var zeroHoleMoves = [];
 
      // --- Deuda técnica inicial ---
+     // Evaluamos el tablero actual para saber si un movimiento mejora o empeora la situación
      var initialEvaluation = self.evaluateGrid(cloneAreaGrid(currentGrid), 0, activeWeights);
-     var initialHolesCost = initialEvaluation.holes * activeWeights.holes; // Costo ponderado
+     var initialHolesCount = initialEvaluation.holes; // Comparación absoluta
+
+     // Preparar Lookahead
+     var nextPieceType = self.tetris.puzzle.nextType;
+     var nextPieceStruct = self.tetris.puzzle.puzzles[nextPieceType];
 
      for (var r = 0; r < 4; r++) {
          for (var x = 0; x < self.tetris.areaX; x++) {
              var simulation = self.simulateDrop(r, x);
              if (!simulation.isValid) continue;
 
-             // PASO CRÍTICO: Pasamos los pesos calculados a la evaluación
+             // Evaluación primaria
              var evaluation = self.evaluateGrid(simulation.grid, simulation.linesCleared, activeWeights);
              var score = evaluation.score;
+
+             // --- BONUS Lookahead (Predicción Futura) ---
+             // Solo si no estamos en pánico, miramos la siguiente pieza para desempatar
+             if (profileName !== 'SURVIVAL' && typeof self.simulateNextPiece === 'function') {
+                  score += self.simulateNextPiece(simulation.grid, nextPieceStruct, activeWeights);
+             }
 
              var move = {
                  rotation: r,
                  x: x,
                  score: score,
-                 // Usamos los mismos pesos para determinar deuda neta
-                 hasZeroNetDebt: (evaluation.holes * activeWeights.holes) <= initialHolesCost,
+                 // Deuda Cero: El movimiento es "seguro" si no aumenta la cantidad absoluta de huecos
+                 hasZeroNetDebt: evaluation.holes <= initialHolesCount,
                  maxHeight: getMaxHeight(simulation.grid)
              };
 
@@ -2308,22 +2319,28 @@ this.executeMoveSmoothly = function(move) {
 
      // Lógica de selección final (Mejor movimiento vs Deuda Cero)
      var finalBestMove = null;
+
+     // Si existen movimientos seguros, elegimos el mejor de ellos
      if (zeroHoleMoves.length > 0) {
-         var bestZeroHoleScore = Infinity;
+         var bestSafeScore = Infinity;
          for (var i = 0; i < zeroHoleMoves.length; i++) {
              var candidate = zeroHoleMoves[i];
-             // Priorizamos movimientos seguros si no sacrifican demasiado score o altura
-             if (candidate.score < bestZeroHoleScore ||
-                (candidate.score === bestZeroHoleScore && finalBestMove && candidate.maxHeight < finalBestMove.maxHeight)) {
-                 bestZeroHoleScore = candidate.score;
+             // Prioridad 1: Score, Prioridad 2: Altura
+             if (candidate.score < bestSafeScore) {
+                 bestSafeScore = candidate.score;
                  finalBestMove = candidate;
+             } else if (candidate.score === bestSafeScore) {
+                 if (finalBestMove && candidate.maxHeight < finalBestMove.maxHeight) {
+                     finalBestMove = candidate;
+                 }
              }
          }
      } else {
+         // Si no hay movimientos seguros, tomamos el "menos malo" global (Pánico)
          finalBestMove = bestMove;
      }
 
-     // Helpers internos...
+     // Helper interno
      function getMaxHeight(grid) {
          var maxH = 0;
          for (var col = 0; col < grid[0].length; col++) {
@@ -2646,16 +2663,62 @@ function buildPredictedBoard() {
 			}
 		}
 
-		while (newGrid.length < self.tetris.areaY) {
-			var emptyRow = [];
-			for (var i = 0; i < self.tetris.areaX; i++) {
-				emptyRow.push(0);
-			}
+                while (newGrid.length < self.tetris.areaY) {
+                        var emptyRow = [];
+                        for (var i = 0; i < self.tetris.areaX; i++) {
+                                emptyRow.push(0);
+                        }
 			newGrid.unshift(emptyRow);
 		}
 
                 return { grid: newGrid, lines: cleared };
         }
+
+        // Predicción de la siguiente pieza para desempatar decisiones (lookahead ligero)
+        this.simulateNextPiece = function(grid, nextPiece, weights) {
+                if (!grid || !nextPiece) return 0;
+
+                let bestNextScore = Infinity;
+                const COLS = self.tetris.areaX;
+
+                // Copia para rotaciones
+                let rotatedPiece = nextPiece; // Asume array de arrays (estructura pura)
+
+                // OPTIMIZACIÓN: Solo 2 rotaciones y pasos de 2 columnas
+                for (let r = 0; r < 2; r++) {
+                        if (r > 0) rotatedPiece = rotateGrid(rotatedPiece);
+
+                        let pieceWidth = rotatedPiece[0].length;
+
+                        for (let x = 0; x <= COLS - pieceWidth; x += 2) {
+                                // 1. Validar posición inicial
+                                if (!isPositionValid(rotatedPiece, x, 0, grid)) continue;
+
+                                // 2. Caída rápida (Hard Drop virtual)
+                                let dropY = 0;
+                                while (isPositionValid(rotatedPiece, x, dropY + 1, grid)) {
+                                        dropY++;
+                                }
+
+                                // 3. Fusión y limpieza
+                                let merged = mergePiece(grid, rotatedPiece, x, dropY);
+                                let cleared = clearFullLines(merged);
+
+                                // 4. Evaluación rápida
+                                // Nota: Pasamos 'weights' para mantener coherencia con la estrategia actual
+                                let evalResult = self.evaluateGrid(cleared.grid, cleared.lines, weights);
+
+                                if (evalResult.score < bestNextScore) {
+                                        bestNextScore = evalResult.score;
+                                }
+                        }
+                }
+
+                if (bestNextScore === Infinity) return 0;
+
+                // Retornamos solo el 30% del score futuro para no opacar el presente
+                return bestNextScore * 0.3;
+        };
 }
 
 function updateBotStrategyUI(strategy) {
