@@ -2176,11 +2176,11 @@ this.executeMoveSmoothly = function(move) {
                         // Ponderación holística: evita filtros rígidos y permite que la
                         // gravedad (landingY) compense penalizaciones pequeñas por huecos.
                         return (
-                                (move.linesCleared * 150) +
-                                (move.landingY * 150) -
-                                (move.holes * 230) -
-                                (move.depth * 5) -
-                                (move.cavesCreated * 20)
+                                (move.linesCleared * 10) +
+								(move.landingY * 1) -
+								(move.holes * 300) -
+								(move.depth * 150) -
+								(move.cavesCreated * 250)
                         );
                 }
 
