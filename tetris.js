@@ -2177,7 +2177,7 @@ this.executeMoveSmoothly = function(move) {
                         // gravedad (landingY) compense penalizaciones pequeñas por huecos.
                         return (
                                 (move.linesCleared * 10) +
-								(move.landingY * 1) -
+								(move.landingY * -1) -
 								(move.holes * 300) -
 								(move.depth * 150) -
 								(move.cavesCreated * 250)
