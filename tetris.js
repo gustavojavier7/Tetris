@@ -2423,32 +2423,42 @@ function buildPredictedBoard() {
         }
 
 
-        function evaluatePosition(grid, linesCleared, landingY) {
+function evaluatePosition(grid, linesCleared, landingY) {
                 const heights = calculateColumnHeights(grid);
                 const bumpiness = calculateBumpiness(heights);
                 const aggHeight = heights.reduce((sum, h) => sum + h, 0);
                 const wells = calculateWells(heights);
                 const holes = countHoles(grid);
                 const depth = holeDepthSum(grid);
+                
+                // 1. Detectar altura máxima y normalizar (0.0 a 1.0)
                 const maxHeight = Math.max(...heights);
                 const normalizedHeight = Math.min(1, maxHeight / grid.length);
-                const bumpRisk = Math.pow(normalizedHeight, 4); // Curva exponencial para aversión tardía
+                
+                // 2. Curva de Riesgo Exponencial (x^4)
+                const bumpRisk = Math.pow(normalizedHeight, 4); 
 
-                // --- CONFIGURACIÓN ULTRA CONSERVADORA CORREGIDA ---
-                const linesCoeff = 100;       // Prioridad: Limpiar líneas
-                const landingYCoeff = 5;      // CORRECCIÓN: Positivo para premiar bajar al suelo (Y=21)
-                const holesCoeff = -400;      // Penalización masiva a huecos
-                const depthCoeff = -150;      // Evitar pozos profundos
-                const bumpCoeff = -5 * (1 + bumpRisk); // Peso dinámico según altura máxima
-                const aggHeightCoeff = -2;    // Mantener la pila baja
-                const wellsCoeff = -30;       // Evitar preparar huecos para palos (I) si no es necesario
+                // --- CONFIGURACIÓN CORREGIDA ---
+                const linesCoeff = 100;       
+                const landingYCoeff = 5;      // Correcto: Positivo para buscar el fondo
+                const holesCoeff = -400;      
+                const depthCoeff = -150;      
+                
+                // 3. FÓRMULA DE AVERSIÓN REAL:
+                // Base: -5
+                // Castigo Extra por Altura: hasta -1000
+                // Resultado: Suelo = -5, Techo = -1005 (Esto sí detiene al bot)
+                const bumpCoeff = -5 - (1000 * bumpRisk); 
+
+                const aggHeightCoeff = -2;    
+                const wellsCoeff = -30;       
 
                 let score = 0;
                 score += linesCleared * linesCoeff;
-                score += landingY * landingYCoeff;     // <--- CORREGIDO AQUÍ
+                score += landingY * landingYCoeff;
                 score += holes * holesCoeff;
                 score += depth * depthCoeff;
-                score += bumpiness * bumpCoeff;
+                score += bumpiness * bumpCoeff; // Aquí se aplica la aversión dinámica fuerte
                 score += aggHeight * aggHeightCoeff;
                 score += wells * wellsCoeff;
 
