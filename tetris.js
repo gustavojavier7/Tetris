@@ -2430,13 +2430,16 @@ function buildPredictedBoard() {
                 const wells = calculateWells(heights);
                 const holes = countHoles(grid);
                 const depth = holeDepthSum(grid);
+                const maxHeight = Math.max(...heights);
+                const normalizedHeight = Math.min(1, maxHeight / grid.length);
+                const bumpRisk = Math.pow(normalizedHeight, 4); // Curva exponencial para aversión tardía
 
                 // --- CONFIGURACIÓN ULTRA CONSERVADORA CORREGIDA ---
                 const linesCoeff = 100;       // Prioridad: Limpiar líneas
                 const landingYCoeff = 5;      // CORRECCIÓN: Positivo para premiar bajar al suelo (Y=21)
                 const holesCoeff = -400;      // Penalización masiva a huecos
                 const depthCoeff = -150;      // Evitar pozos profundos
-                const bumpCoeff = -5;        // Aplanar la superficie (CRÍTICO para estilo conservador)
+                const bumpCoeff = -5 * (1 + bumpRisk); // Peso dinámico según altura máxima
                 const aggHeightCoeff = -2;    // Mantener la pila baja
                 const wellsCoeff = -30;       // Evitar preparar huecos para palos (I) si no es necesario
 
