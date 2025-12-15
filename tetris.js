@@ -2434,9 +2434,9 @@ function buildPredictedBoard() {
                 // --- CONFIGURACIÓN ULTRA CONSERVADORA CORREGIDA ---
                 const linesCoeff = 100;       // Prioridad: Limpiar líneas
                 const landingYCoeff = 5;      // CORRECCIÓN: Positivo para premiar bajar al suelo (Y=21)
-                const holesCoeff = -300;      // Penalización masiva a huecos
+                const holesCoeff = -400;      // Penalización masiva a huecos
                 const depthCoeff = -150;      // Evitar pozos profundos
-                const bumpCoeff = -20;        // Aplanar la superficie (CRÍTICO para estilo conservador)
+                const bumpCoeff = -5;        // Aplanar la superficie (CRÍTICO para estilo conservador)
                 const aggHeightCoeff = -2;    // Mantener la pila baja
                 const wellsCoeff = -30;       // Evitar preparar huecos para palos (I) si no es necesario
 
