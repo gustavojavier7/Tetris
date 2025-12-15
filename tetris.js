@@ -2136,69 +2136,45 @@ this.executeMoveSmoothly = function(move) {
         }
 
         this.calculateBestMove = function () {
-
                 const area = self.tetris.area;
                 const puzzle = self.tetris.puzzle;
                 if (!area || !puzzle) return null;
-
                 const baseGrid = cloneAreaGrid(area.board);
-                const baseCaves = countCaves(baseGrid);
-
                 let candidates = [];
 
+                // Lookahead: Considerar la próxima pieza (simplificado a la mejor posición para la actual basada en la siguiente)
+                // Para simplificar, iteramos sobre la pieza actual (puzzle.type)
+                // Si se quisiera lookahead real con la siguiente (puzzle.nextType), se complicaría significativamente el bucle.
+                // La versión actual evalúa cada posición de la pieza actual.
                 for (let rotation = 0; rotation < 4; rotation++) {
                         for (let x = 0; x < self.tetris.areaX; x++) {
-
                                 const sim = self.simulateDrop(rotation, x);
                                 if (!sim.isValid) continue;
-
-                                const grid = sim.grid;
-                                const holes = countHoles(grid);
-                                const depth = holeDepthSum(grid);
-                                const caves = countCaves(grid);
-                                const cavesCreated = Math.max(0, caves - baseCaves);
+                                // La simulación ya da el estado del tablero después de que CAIGA la pieza actual
+                                // Evaluamos ese estado final
+                                const evaluation = evaluatePosition(sim.grid, sim.linesCleared, sim.finalY);
 
                                 candidates.push({
                                         rotation,
                                         x,
-                                        holes,
-                                        depth,
-                                        cavesCreated,
-                                        linesCleared: sim.linesCleared,
-                                        landingY: sim.finalY
+                                        score: evaluation.score,
+                                        // No es necesario almacenar otros valores aquí si solo se usa el score para ordenar
                                 });
                         }
                 }
 
                 if (candidates.length === 0) return null;
 
-                function scoreMove(move) {
-                        // Ponderación holística: evita filtros rígidos y permite que la
-                        // gravedad (landingY) compense penalizaciones pequeñas por huecos.
-                        return (
-                                (move.linesCleared * 10) +
-								-(move.landingY * 1) -
-								(move.holes * 300) -
-								(move.depth * 150) -
-								(move.cavesCreated * 250)
-                        );
-                }
-
-                let bestCandidate = null;
-                let bestScore = -Infinity;
-
-                for (let i = 0; i < candidates.length; i++) {
-                        const move = candidates[i];
-                        const score = scoreMove(move);
-
-                        if (!bestCandidate || score > bestScore || (score === bestScore && move.x < bestCandidate.x)) {
-                                bestScore = score;
-                                bestCandidate = move;
+                // Encontrar la jugada con el SCORE MÁS ALTO (mejor evaluación)
+                let bestCandidate = candidates[0]; // Inicializar con el primero
+                for (let i = 1; i < candidates.length; i++) {
+                        if (candidates[i].score > bestCandidate.score) {
+                                bestCandidate = candidates[i];
                         }
                 }
 
                 if (!bestCandidate) return null;
-
+                //console.log("[BOT] Mejor jugada calculada:", bestCandidate); // Descomentar para debug
                 return { rotation: bestCandidate.rotation, x: bestCandidate.x };
         };
 
@@ -2401,6 +2377,87 @@ function buildPredictedBoard() {
 		}
 
                 return { grid: newGrid, lines: cleared };
+        }
+
+        // --- FUNCIONES AUXILIARES PARA EVALUACIÓN ---
+        function calculateColumnHeights(grid) {
+                const ROWS = grid.length;
+                const COLS = grid[0].length;
+                let heights = new Array(COLS).fill(0);
+                for (let x = 0; x < COLS; x++) {
+                        for (let y = 0; y < ROWS; y++) {
+                                if (grid[y][x]) {
+                                        heights[x] = ROWS - y; // Altura medida desde abajo
+                                        break; // Romper al encontrar el primer bloque desde arriba
+                                }
+                        }
+                }
+                return heights;
+        }
+
+        function calculateBumpiness(heights) {
+                let bumpiness = 0;
+                for (let x = 0; x < heights.length - 1; x++) {
+                        bumpiness += Math.abs(heights[x] - heights[x + 1]);
+                }
+                return bumpiness;
+        }
+
+        function calculateWells(heights) {
+                let wells = 0;
+                const COLS = heights.length;
+                for (let x = 0; x < COLS; x++) {
+                        // Un pozo es una columna donde ambos lados son más altos
+                        let leftH = (x === 0) ? Infinity : heights[x - 1];
+                        let rightH = (x === COLS - 1) ? Infinity : heights[x + 1];
+                        let wellDepth = Math.max(0, Math.min(leftH, rightH) - heights[x]);
+                        // Aplica penalización solo si hay profundidad de pozo
+                        if (wellDepth > 0) {
+                                // Los pozos exteriores (x=0 o x=end) pueden ser menos perjudiciales o incluso útiles para T-Spins
+                                // Pero como regla general, los pozos centrales son malos. Simplificamos: penalización proporcional.
+                                // La penalización puede ser lineal o cuadrática. Lineal es suficiente para inicio.
+                                wells += wellDepth;
+                        }
+                }
+                return wells;
+        }
+
+
+        function evaluatePosition(grid, linesCleared, landingY) {
+                const heights = calculateColumnHeights(grid);
+                const bumpiness = calculateBumpiness(heights);
+                const aggHeight = heights.reduce((sum, h) => sum + h, 0);
+                const wells = calculateWells(heights);
+                const holes = countHoles(grid); // Suponiendo que esta función ya existía o está definida arriba
+                const depth = holeDepthSum(grid); // Suponiendo que esta función ya existía o está definida arriba
+
+                // Coeficientes ajustables para tunning
+                const linesCoeff = 100;
+                const landingYCoeff = -5; // Penaliza la altura (signo negativo)
+                const holesCoeff = -300; // Penaliza huecos (signo negativo)
+                const depthCoeff = -150; // Penaliza profundidad de huecos (signo negativo)
+                const cavesCoeff = -250; // Penaliza cuevas (signo negativo) - Si se usa cavesCreated
+                const bumpCoeff = -15; // Penaliza irregularidades (signo negativo)
+                const aggHeightCoeff = -5; // Penaliza altura total (signo negativo)
+                const wellsCoeff = -20; // Penaliza pozos (signo negativo)
+
+                // Calcular puntuación final (una puntuación más alta es mejor)
+                let score = 0;
+                score += linesCleared * linesCoeff;      // Recompensa por limpiar líneas
+                score += landingY * landingYCoeff;      // Penaliza caer en posiciones altas
+                score += holes * holesCoeff;            // Penaliza nuevos huecos creados
+                score += depth * depthCoeff;            // Penaliza profundidad de huecos
+                // score += cavesCreated * cavesCoeff;  // Si se usa cavesCreated desde simulateDrop
+                score += bumpiness * bumpCoeff;         // Penaliza irregularidades del terreno
+                score += aggHeight * aggHeightCoeff;    // Penaliza la altura total del terreno
+                score += wells * wellsCoeff;            // Penaliza la formación de pozos
+
+                // Opcional: Penalización exponencial para la altura máxima
+                // const maxHeight = Math.max(...heights);
+                // score -= Math.pow(1.5, maxHeight); // Ajustar base según agresividad deseada
+
+                //console.log(`Eval: Lines=${linesCleared}, LandY=${landingY}, Holes=${holes}, Depth=${depth}, Bump=${bumpiness}, AggH=${aggHeight}, Wells=${wells}, Score=${score}`); // Descomentar para debug
+                return { score, heights, aggHeight, bumpiness, wells, holes, depth }; // Devolver también métricas si es útil para debugging
         }
 
 }
