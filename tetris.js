@@ -2428,36 +2428,28 @@ function buildPredictedBoard() {
                 const bumpiness = calculateBumpiness(heights);
                 const aggHeight = heights.reduce((sum, h) => sum + h, 0);
                 const wells = calculateWells(heights);
-                const holes = countHoles(grid); // Suponiendo que esta función ya existía o está definida arriba
-                const depth = holeDepthSum(grid); // Suponiendo que esta función ya existía o está definida arriba
+                const holes = countHoles(grid);
+                const depth = holeDepthSum(grid);
 
-                // Coeficientes ajustables para tunning
-                const linesCoeff = 100;
-                const landingYCoeff = -5; // Penaliza la altura (signo negativo)
-                const holesCoeff = -300; // Penaliza huecos (signo negativo)
-                const depthCoeff = -150; // Penaliza profundidad de huecos (signo negativo)
-                const cavesCoeff = -250; // Penaliza cuevas (signo negativo) - Si se usa cavesCreated
-                const bumpCoeff = -15; // Penaliza irregularidades (signo negativo)
-                const aggHeightCoeff = -5; // Penaliza altura total (signo negativo)
-                const wellsCoeff = -20; // Penaliza pozos (signo negativo)
+                // --- CONFIGURACIÓN ULTRA CONSERVADORA CORREGIDA ---
+                const linesCoeff = 100;       // Prioridad: Limpiar líneas
+                const landingYCoeff = 5;      // CORRECCIÓN: Positivo para premiar bajar al suelo (Y=21)
+                const holesCoeff = -300;      // Penalización masiva a huecos
+                const depthCoeff = -150;      // Evitar pozos profundos
+                const bumpCoeff = -20;        // Aplanar la superficie (CRÍTICO para estilo conservador)
+                const aggHeightCoeff = -2;    // Mantener la pila baja
+                const wellsCoeff = -30;       // Evitar preparar huecos para palos (I) si no es necesario
 
-                // Calcular puntuación final (una puntuación más alta es mejor)
                 let score = 0;
-                score += linesCleared * linesCoeff;      // Recompensa por limpiar líneas
-                score += landingY * landingYCoeff;      // Penaliza caer en posiciones altas
-                score += holes * holesCoeff;            // Penaliza nuevos huecos creados
-                score += depth * depthCoeff;            // Penaliza profundidad de huecos
-                // score += cavesCreated * cavesCoeff;  // Si se usa cavesCreated desde simulateDrop
-                score += bumpiness * bumpCoeff;         // Penaliza irregularidades del terreno
-                score += aggHeight * aggHeightCoeff;    // Penaliza la altura total del terreno
-                score += wells * wellsCoeff;            // Penaliza la formación de pozos
+                score += linesCleared * linesCoeff;
+                score += landingY * landingYCoeff;     // <--- CORREGIDO AQUÍ
+                score += holes * holesCoeff;
+                score += depth * depthCoeff;
+                score += bumpiness * bumpCoeff;
+                score += aggHeight * aggHeightCoeff;
+                score += wells * wellsCoeff;
 
-                // Opcional: Penalización exponencial para la altura máxima
-                // const maxHeight = Math.max(...heights);
-                // score -= Math.pow(1.5, maxHeight); // Ajustar base según agresividad deseada
-
-                //console.log(`Eval: Lines=${linesCleared}, LandY=${landingY}, Holes=${holes}, Depth=${depth}, Bump=${bumpiness}, AggH=${aggHeight}, Wells=${wells}, Score=${score}`); // Descomentar para debug
-                return { score, heights, aggHeight, bumpiness, wells, holes, depth }; // Devolver también métricas si es útil para debugging
+                return { score, heights, aggHeight, bumpiness, wells, holes, depth };
         }
 
 }
