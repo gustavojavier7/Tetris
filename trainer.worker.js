@@ -130,77 +130,100 @@ function mutate(weights) {
     return mutated;
 }
 
+// --- EVALUACIÓN (Alineada con tetris.js) ---
 function evaluateState(board, linesCleared, landingY, weights) {
-    const heights = [];
-    let holes = 0, blocked = 0;
-    let aggHeight = 0;
-
-    // 1. Calcular Alturas, Huecos y Bloqueos
+    // 1. Inicialización de contadores
+    let holes = 0;
+    let blocked = 0;
+    const heights = new Array(WIDTH).fill(0);
+    
+    // --- ESCANEO DE COLUMNAS (Vertical) ---
     for (let x = 0; x < WIDTH; x++) {
         let colHeight = 0;
-        let foundBlock = false;
+        let blockFound = false; // Para contar huecos (Top-Down logic implícita)
+        let holeFoundBelow = false; // Para contar bloqueos (Bottom-Up logic)
+
+        // A. Altura y Huecos (Top-Down)
         for (let y = 0; y < HEIGHT; y++) {
-            if (board[y][x]) {
-                if (!foundBlock) {
+            if (board[y][x] !== 0) {
+                if (!blockFound) {
                     colHeight = HEIGHT - y;
-                    foundBlock = true;
+                    blockFound = true;
                 }
-            } else if (foundBlock) {
-                holes++; // Hueco encontrado
-                // Verificar si está bloqueado (tiene techo)
-                let k = y - 1;
-                while (k >= 0 && board[k][x]) {
-                    blocked++;
-                    k--;
-                }
+            } else if (blockFound) {
+                // Si ya encontramos un bloque arriba y esto es vacío -> Hueco
+                holes++;
             }
         }
         heights[x] = colHeight;
-        aggHeight += colHeight;
+
+        // B. Celdas Bloqueadas (Bottom-Up - Copia exacta de lógica Main)
+        for (let y = HEIGHT - 1; y >= 0; y--) {
+            if (board[y][x] === 0) {
+                holeFoundBelow = true;
+            } else {
+                // Si es un bloque y sabemos que hay un hueco debajo...
+                if (holeFoundBelow) {
+                    blocked++;
+                }
+            }
+        }
     }
 
-    // 2. Calcular Rugosidad (Bumpiness)
+    // 2. Cálculos Horizontales y Agregados
+    let aggHeight = 0;
     let bumpiness = 0;
-    for (let x = 0; x < WIDTH - 1; x++) {
-        bumpiness += Math.abs(heights[x] - heights[x + 1]);
+    let wells = 0;
+
+    for (let x = 0; x < WIDTH; x++) {
+        aggHeight += heights[x];
+        
+        // Bumpiness
+        if (x < WIDTH - 1) {
+            bumpiness += Math.abs(heights[x] - heights[x + 1]);
+        }
+
+        // Wells (Pozos)
+        let leftH = (x === 0) ? Infinity : heights[x - 1];
+        let rightH = (x === WIDTH - 1) ? Infinity : heights[x + 1];
+        let wellDepth = Math.max(0, Math.min(leftH, rightH) - heights[x]);
+        wells += wellDepth;
     }
 
-    // 3. --- ALINEACIÓN: Cálculo Real de Pozos (Wells) ---
-    // (Antes faltaba o estaba a 0)
-    const wells = calculateWells(heights);
-
-    // 4. Aversión Dinámica (Bump Risk)
+    // 3. Aversión Dinámica (Bump Risk)
     const maxHeight = Math.max(...heights);
     const normalizedHeight = Math.min(1, maxHeight / HEIGHT);
     const bumpRisk = Math.pow(normalizedHeight, 4);
     const dynamicBump = weights.bumpiness - (weights.bumpRisk * bumpRisk);
 
-    // 5. Transiciones (Solidez)
+    // 4. Transiciones (Topología)
     let rowTrans = 0;
     for (let y = 0; y < HEIGHT; y++) {
         let prev = 1; // Pared izquierda sólida
         for (let x = 0; x < WIDTH; x++) {
-            if (!!board[y][x] !== !!prev) rowTrans++;
-            prev = board[y][x];
+            const filled = board[y][x] !== 0 ? 1 : 0;
+            if (filled !== prev) rowTrans++;
+            prev = filled;
         }
-        if (!prev) rowTrans++; // Pared derecha sólida
+        if (prev === 0) rowTrans++; // Pared derecha sólida
     }
 
     let colTrans = 0;
     for (let x = 0; x < WIDTH; x++) {
         let prev = 1; // Suelo sólido
         for (let y = HEIGHT - 1; y >= 0; y--) {
-            if (!!board[y][x] !== !!prev) colTrans++;
-            prev = board[y][x];
+            const filled = board[y][x] !== 0 ? 1 : 0;
+            if (filled !== prev) colTrans++;
+            prev = filled;
         }
     }
 
-    // 6. Score Final
+    // 5. Suma Final de Puntuación
     let score = 0;
     score += linesCleared * weights.lines;
-    score += landingY * weights.landingHeight; // GRAVEDAD CORRECTA (Y positivo)
+    score += landingY * weights.landingHeight; // Gravedad Positiva (Profundidad)
     score += holes * weights.holes;
-    score += blocked * weights.blocked;
+    score += blocked * weights.blocked;        // Lógica corregida
     score += rowTrans * weights.rowTrans;
     score += colTrans * weights.colTrans;
     score += bumpiness * dynamicBump;
