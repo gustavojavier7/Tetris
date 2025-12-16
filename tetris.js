@@ -2237,11 +2237,9 @@ this.executeMoveSmoothly = function(move) {
                 const bumpRisk = Math.pow(normalizedHeight, 4);
                 const currentBumpCoeff = this.weights.bumpiness - (this.weights.bumpRisk * bumpRisk);
 
-                const landingHeight = grid.length - landingY;
-
                 let score = 0;
                 score += linesCleared * this.weights.lines;
-                score += landingHeight * this.weights.landingHeight;
+                score += landingY * this.weights.landingHeight;
                 score += holes * this.weights.holes;
                 score += blocked * this.weights.blocked;
                 score += rowTrans * this.weights.rowTrans;
