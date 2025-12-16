@@ -397,12 +397,19 @@ function playOneGame(weights) {
 
                 const holes = Model.newHoles(baseGrid, candidate.boardAfter, WIDTH, HEIGHT);
                 const dist = Model.minManhattanToSet(candidate.pieceCells, candidate.x, candidate.y, targetSet);
-                const key = [holes, dist];
+                const contacts = Model.countContactPoints(
+                    baseGrid,
+                    candidate.pieceCells,
+                    candidate.x,
+                    candidate.y,
+                    WIDTH,
+                    HEIGHT
+                );
 
-                if (!best ||
-                    key[0] < best.key[0] ||
-                    (key[0] === best.key[0] && key[1] < best.key[1])) {
-                    best = { candidate, key };
+                const score = (holes * 20.0) + (dist * 1.0) - (contacts * 2.0);
+
+                if (!best || score < best.score) {
+                    best = { candidate, score, meta: { holes, dist, contacts } };
                 }
             }
 
@@ -411,8 +418,10 @@ function playOneGame(weights) {
                     console.log('[PARCHE B]',
                         'x=', best.candidate.x,
                         'y=', best.candidate.y,
-                        'Hnew=', best.key[0],
-                        'dist=', best.key[1]
+                        'score=', best.score,
+                        'Hnew=', best.meta.holes,
+                        'dist=', best.meta.dist,
+                        'contact=', best.meta.contacts
                     );
                 }
                 chosen = best.candidate;

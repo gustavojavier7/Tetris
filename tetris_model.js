@@ -175,7 +175,7 @@
     return targets;
   }
 
-  // Calcula la distancia mínima desde cualquier bloque de la pieza 
+  // Calcula la distancia mínima desde cualquier bloque de la pieza
   // hasta CUALQUIER celda del conjunto objetivo.
   function minManhattanToSet(pieceCells, x, y, targetSet) {
     var minDistance = Infinity;
@@ -197,6 +197,45 @@
       }
     }
     return minDistance === Infinity ? 0 : minDistance;
+  }
+
+  /**
+   * Calcula la "Fricción Algebraica" o Contacto.
+   * Cuenta cuántos lados de los bloques de la pieza tocan bloques fijos o bordes.
+   * Premia encajar la pieza en huecos (snug fit).
+   */
+  function countContactPoints(grid, pieceCells, x, y, W, H) {
+    var contacts = 0;
+    var pieceGlobals = pieceCells.map(function(c) {
+      return { x: x + c.dx, y: y + c.dy };
+    });
+
+    var selfSet = new Set();
+    pieceGlobals.forEach(function(p) { selfSet.add(p.x + ',' + p.y); });
+
+    var dx = [0, 0, -1, 1];
+    var dy = [-1, 1, 0, 0];
+
+    for (var i = 0; i < pieceGlobals.length; i++) {
+      var p = pieceGlobals[i];
+
+      for (var dir = 0; dir < 4; dir++) {
+        var nx = p.x + dx[dir];
+        var ny = p.y + dy[dir];
+
+        if (selfSet.has(nx + ',' + ny)) continue;
+
+        if (nx < 0 || nx >= W || ny >= H) {
+          contacts++;
+          continue;
+        }
+
+        if (ny >= 0 && grid[ny][nx]) {
+          contacts++;
+        }
+      }
+    }
+    return contacts;
   }
 
   function __selfTest() {
@@ -236,6 +275,7 @@
     minManhattanToCell: minManhattanToCell,
     getLowestFreeCells: getLowestFreeCells,
     minManhattanToSet: minManhattanToSet,
+    countContactPoints: countContactPoints,
     __selfTest: __selfTest
   };
 
