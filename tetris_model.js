@@ -136,6 +136,69 @@
     return best === Infinity ? 0 : best;
   }
 
+  // Obtiene el conjunto S de celdas libres estables con y_max
+  function getLowestFreeCells(grid, W, H) {
+    var stableCells = [];
+    var maxY = -1;
+
+    // 1. Identificar todas las celdas estables S
+    for (var y = 0; y < H; y++) {
+      for (var x = 0; x < W; x++) {
+        // Condición: Celda libre
+        if (grid[y][x] === 0) {
+          // Condición: Soporte vertical (Fondo o Bloque debajo)
+          var hasSupport = (y === H - 1) || (grid[y + 1][x] !== 0);
+
+          if (hasSupport) {
+            stableCells.push({ x: x, y: y });
+            if (y > maxY) {
+              maxY = y;
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Filtrar para obtener solo lowestFreeCells (donde y == y_max)
+    var targets = [];
+    for (var i = 0; i < stableCells.length; i++) {
+      if (stableCells[i].y === maxY) {
+        targets.push(stableCells[i]);
+      }
+    }
+
+    // Fallback de seguridad: si no hay celdas (tablero lleno), devolver centro-abajo
+    if (targets.length === 0) {
+      return [{ x: Math.floor(W / 2), y: H - 1 }];
+    }
+
+    return targets;
+  }
+
+  // Calcula la distancia mínima desde cualquier bloque de la pieza 
+  // hasta CUALQUIER celda del conjunto objetivo.
+  function minManhattanToSet(pieceCells, x, y, targetSet) {
+    var minDistance = Infinity;
+
+    // Coordenadas absolutas de la pieza
+    var pieceGlobals = pieceCells.map(function(c) {
+      return { x: x + c.dx, y: y + c.dy };
+    });
+
+    // Comparar cada bloque de la pieza contra cada objetivo del conjunto
+    for (var i = 0; i < pieceGlobals.length; i++) {
+      var p = pieceGlobals[i];
+      for (var j = 0; j < targetSet.length; j++) {
+        var t = targetSet[j];
+        var dist = Math.abs(p.x - t.x) + Math.abs(p.y - t.y);
+        if (dist < minDistance) {
+          minDistance = dist;
+        }
+      }
+    }
+    return minDistance === Infinity ? 0 : minDistance;
+  }
+
   function __selfTest() {
     var ok = true;
     var W = 10, H = 20;
@@ -171,6 +234,8 @@
     peakCell: peakCell,
     pieceCellsGlobal: pieceCellsGlobal,
     minManhattanToCell: minManhattanToCell,
+    getLowestFreeCells: getLowestFreeCells,
+    minManhattanToSet: minManhattanToSet,
     __selfTest: __selfTest
   };
 
