@@ -2450,8 +2450,8 @@ function evaluatePosition(grid, linesCleared, landingY) {
                 // Resultado: Suelo = -5, Techo = -1005 (Esto sí detiene al bot)
                 const bumpCoeff = -5 - (1000 * bumpRisk); 
 
-                const aggHeightCoeff = -2;    
-                const wellsCoeff = -30;       
+                const aggHeightCoeff = -10;    
+                const wellsCoeff = -50;       
 
                 let score = 0;
                 score += linesCleared * linesCoeff;
