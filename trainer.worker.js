@@ -233,7 +233,12 @@ function countRoofedHoles(board) {
 
 function getPitDepth(heights) {
     const maxHeight = getMaxHeight(heights);
-    return heights.reduce((sum, h) => sum + (maxHeight - h), 0);
+    let maxPit = 0;
+    for (let h of heights) {
+        const pit = maxHeight - h;
+        if (pit > maxPit) maxPit = pit;
+    }
+    return maxPit;
 }
 
 function getFlatness(heights) {
@@ -403,7 +408,7 @@ function playOneGame(weights) {
         totalLines += bestMove.lines;
         moves++;
     }
-    return totalLines;
+    return { lines: totalLines, moves };
 }
 
 /**
@@ -434,10 +439,15 @@ function trainStep() {
     // 2. Evaluar cada individuo de la población
     for (let i = 0; i < population.length; i++) {
         let totalLines = 0;
+        let moves = 0;
         for (let g = 0; g < TRAINING_CONFIG.GAMES_PER_INDIVIDUAL; g++) {
-            totalLines += playOneGame(population[i].weights);
+            const result = playOneGame(population[i].weights);
+            totalLines += result.lines;
+            moves += result.moves;
         }
-        population[i].fitness = totalLines / TRAINING_CONFIG.GAMES_PER_INDIVIDUAL;
+        const avgLines = totalLines / TRAINING_CONFIG.GAMES_PER_INDIVIDUAL;
+        const avgMoves = moves / TRAINING_CONFIG.GAMES_PER_INDIVIDUAL;
+        population[i].fitness = avgLines * 100 + avgMoves;
     }
 
     // 3. Seleccionar elites para conservar los mejores individuos
