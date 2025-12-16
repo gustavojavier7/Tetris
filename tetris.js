@@ -1834,6 +1834,8 @@ function TetrisBot(tetrisInstance) {
         this.bestBotMove = null; // Movimiento óptimo pendiente de ejecutar
         this.ghostElements = []; // Previsualización de la jugada del bot
 
+        const Model = (typeof window !== 'undefined' && window.TetrisModel) ? window.TetrisModel : null;
+
         this.weights = {
                 LINES_CLEARED: 3.2,
                 HOLES: -2.0,
@@ -2130,6 +2132,9 @@ this.executeMoveSmoothly = function(move) {
         }
 
         function countHoles(grid) {
+                if (Model && Model.holeSet) {
+                        return Model.holeSet(grid, grid[0].length, grid.length).size;
+                }
                 let holes = 0;
                 const ROWS = grid.length;
                 const COLS = grid[0].length;
@@ -2364,14 +2369,13 @@ this.simulateDrop = function(rotation, targetX) {
                 return normalized;
         }
 
-        if (!self.tetris || !self.tetris.area) {
+        if (!Model || !self.tetris || !self.tetris.area) {
                 return logResult({ isValid: false, grid: [], linesCleared: 0, finalX: null, finalY: null, pieceGrid: null });
         }
 
         var referenceBoard = self.predictedBoard || self.tetris.area.board;
         var areaGrid = cloneAreaGrid(referenceBoard);
 
-        // [CORRECCIÓN] Usar la variable unificada
         var activePuzzle = self.tetris.puzzle;
         if (!activePuzzle) {
                 return logResult({ isValid: false, grid: [], linesCleared: 0, finalX: null, finalY: null, pieceGrid: null });
@@ -2387,10 +2391,11 @@ this.simulateDrop = function(rotation, targetX) {
                 pieceGrid = rotateGrid(pieceGrid);
         }
 
+        var pieceCells = matrixToCells(pieceGrid);
         var posX = activePuzzle.getX();
         var posY = activePuzzle.getY();
 
-        if (!isPositionValid(pieceGrid, posX, posY, areaGrid)) {
+        if (!Model.placeable(areaGrid, pieceCells, posX, posY, self.tetris.areaX, self.tetris.areaY)) {
                 return logResult({ isValid: false, grid: [], linesCleared: 0, finalX: null, finalY: null, pieceGrid: null });
         }
 
@@ -2401,70 +2406,54 @@ this.simulateDrop = function(rotation, targetX) {
         var dir = targetX > posX ? 1 : -1;
         while (posX !== targetX) {
                 var nextX = posX + dir;
-                if (!isPositionValid(pieceGrid, nextX, posY, areaGrid)) {
+                if (!Model.placeable(areaGrid, pieceCells, nextX, posY, self.tetris.areaX, self.tetris.areaY)) {
                         return logResult({ isValid: false, grid: [], linesCleared: 0, finalX: null, finalY: null, pieceGrid: null });
                 }
                 posX = nextX;
         }
 
-        while (isPositionValid(pieceGrid, posX, posY + 1, areaGrid)) {
-                posY++;
+        var landingY = Model.gravityY(areaGrid, pieceCells, posX, self.tetris.areaX, self.tetris.areaY, posY);
+        if (landingY === null) {
+                return logResult({ isValid: false, grid: [], linesCleared: 0, finalX: null, finalY: null, pieceGrid: null });
         }
 
-        var mergedGrid = mergePiece(areaGrid, pieceGrid, posX, posY);
-        var cleared = clearFullLines(mergedGrid);
+        var mergedGrid = Model.applyPlacement(areaGrid, pieceCells, posX, landingY);
+        var cleared = Model.clearLines(mergedGrid, self.tetris.areaX, self.tetris.areaY);
 
-        return logResult({ isValid: true, grid: cleared.grid, linesCleared: cleared.lines, finalX: posX, finalY: posY, pieceGrid: pieceGrid });
+        return logResult({ isValid: true, grid: cleared.grid, linesCleared: cleared.cleared, finalX: posX, finalY: landingY, pieceGrid: pieceGrid });
                         };
 
 // Construye el tablero proyectado incluyendo la posición final de la pieza humana.
 function buildPredictedBoard() {
-        if (!self.tetris || !self.tetris.area) {
+        if (!Model || !self.tetris || !self.tetris.area) {
                 return null;
         }
 
-        // [CORREGIDO] Si la pieza está activa (NO detenida), debemos fusionarla en la proyección.
         if (self.tetris.puzzle && !self.tetris.puzzle.isStopped()) {
                 var baseGrid = cloneAreaGrid(self.tetris.area.board);
-                var currentPiece = clonePieceGrid(self.tetris.puzzle.board);
+                var currentPieceGrid = clonePieceGrid(self.tetris.puzzle.board);
                 var posX = self.tetris.puzzle.getX();
                 var posY = self.tetris.puzzle.getY();
+                var pieceCells = matrixToCells(currentPieceGrid);
 
-                // Validar posición inicial antes de proyectar
-                if (isPositionValid(currentPiece, posX, posY, baseGrid)) {
-                        // Simular caída (Hard Drop) de la pieza actual
-                        while (isPositionValid(currentPiece, posX, posY + 1, baseGrid)) {
-                                posY++;
+                if (Model.placeable(baseGrid, pieceCells, posX, posY, self.tetris.areaX, self.tetris.areaY)) {
+                        var landing = Model.gravityY(baseGrid, pieceCells, posX, self.tetris.areaX, self.tetris.areaY, posY);
+                        if (landing !== null) {
+                                return Model.applyPlacement(baseGrid, pieceCells, posX, landing);
                         }
-                        return mergePiece(baseGrid, currentPiece, posX, posY);
                 }
         }
 
-        // Si la pieza está detenida o no existe, devolvemos el tablero tal cual.
         return cloneAreaGrid(self.tetris.area.board);
 }
 
-	function cloneAreaGrid(board) {
-		var grid = [];
-		for (var y = 0; y < board.length; y++) {
-			grid.push([]);
-			for (var x = 0; x < board[y].length; x++) {
-				grid[y].push(board[y][x] ? 1 : 0);
-			}
-		}
-		return grid;
-	}
+        function cloneAreaGrid(board) {
+                return Model.cloneGrid(board.map(function(row) { return row.map(function(cell) { return cell ? 1 : 0; }); }));
+        }
 
-	function clonePieceGrid(board) {
-		var grid = [];
-		for (var y = 0; y < board.length; y++) {
-			grid.push([]);
-			for (var x = 0; x < board[y].length; x++) {
-				grid[y].push(board[y][x] ? 1 : 0);
-			}
-		}
-		return grid;
-	}
+        function clonePieceGrid(board) {
+                return Model.cloneGrid(board.map(function(row) { return row.map(function(cell) { return cell ? 1 : 0; }); }));
+        }
 
 	function rotateGrid(matrix) {
 		var size = matrix.length;
@@ -2489,62 +2478,14 @@ function buildPredictedBoard() {
 		return rotated;
 	}
 
-	function isPositionValid(piece, posX, posY, areaGrid) {
-		for (var y = 0; y < piece.length; y++) {
-			for (var x = 0; x < piece[y].length; x++) {
-				if (piece[y][x]) {
-					var boardY = posY + y;
-					var boardX = posX + x;
-
-					if (boardY >= self.tetris.areaY) { return false; }
-					if (boardX < 0 || boardX >= self.tetris.areaX) { return false; }
-					if (areaGrid[boardY][boardX]) { return false; }
-				}
-			}
-		}
-		return true;
-	}
-
-	function mergePiece(areaGrid, piece, posX, posY) {
-		var grid = cloneAreaGrid(areaGrid);
-		for (var y = 0; y < piece.length; y++) {
-			for (var x = 0; x < piece[y].length; x++) {
-				if (piece[y][x]) {
-					grid[posY + y][posX + x] = 1;
-				}
-			}
-		}
-		return grid;
-	}
-
-        function clearFullLines(grid) {
-                var cleared = 0;
-                var newGrid = [];
-                for (var y = grid.length - 1; y >= 0; y--) {
-                        var isFull = true;
-			for (var x = 0; x < grid[y].length; x++) {
-				if (!grid[y][x]) {
-					isFull = false;
-					break;
-				}
-			}
-
-			if (isFull) {
-				cleared++;
-			} else {
-				newGrid.unshift(grid[y].slice());
-			}
-		}
-
-                while (newGrid.length < self.tetris.areaY) {
-                        var emptyRow = [];
-                        for (var i = 0; i < self.tetris.areaX; i++) {
-                                emptyRow.push(0);
+        function matrixToCells(matrix) {
+                var cells = [];
+                for (var y = 0; y < matrix.length; y++) {
+                        for (var x = 0; x < matrix[y].length; x++) {
+                                if (matrix[y][x]) cells.push({ dx: x, dy: y });
                         }
-			newGrid.unshift(emptyRow);
-		}
-
-                return { grid: newGrid, lines: cleared };
+                }
+                return Model.normalizeCells(cells);
         }
 
 }

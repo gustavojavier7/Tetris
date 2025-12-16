@@ -1,4 +1,6 @@
 // trainer.worker.js (VERSIÓN ALINEADA CON ALGORITMO GENÉTICO)
+importScripts('tetris_model.js');
+const Model = self.TetrisModel;
 
 // --- 1. ALINEACIÓN DE DIMENSIONES ---
 const WIDTH = 12;  // Sincronizado con tetris.js (this.areaX)
@@ -52,55 +54,23 @@ function initBoard() {
     return Array.from({ length: HEIGHT }, () => Array(WIDTH).fill(0));
 }
 
-function getDropY(board, shape, x) {
-    let y = -2;
-    while (true) {
-        if (!isValid(board, shape, x, y + 1)) break;
-        y++;
-    }
-    return y;
-}
-
-function isValid(board, shape, x, y) {
-    for (let r = 0; r < shape.length; r++) {
-        for (let c = 0; c < shape[r].length; c++) {
-            if (shape[r][c]) {
-                const newX = x + c;
-                const newY = y + r;
-                if (newX < 0 || newX >= WIDTH || newY >= HEIGHT) return false;
-                if (newY < 0) continue;
-                if (board[newY][newX] !== 0) return false;
-            }
+function shapeToCells(shape) {
+    const cells = [];
+    for (let y = 0; y < shape.length; y++) {
+        for (let x = 0; x < shape[y].length; x++) {
+            if (shape[y][x]) cells.push({ dx: x, dy: y });
         }
     }
-    return true;
+    return Model.normalizeCells(cells);
 }
 
-function lockPiece(board, shape, x, y) {
-    const newBoard = board.map((row) => row.slice());
-    for (let r = 0; r < shape.length; r++) {
-        for (let c = 0; c < shape[r].length; c++) {
-            if (shape[r][c] && y + r >= 0) {
-                newBoard[y + r][x + c] = 1;
-            }
-        }
-    }
-    return newBoard;
-}
-
-function removeLines(board) {
-    let lines = 0;
-    const newBoard = board.filter((row) => {
-        if (row.every((cell) => cell !== 0)) {
-            lines++;
-            return false;
-        }
-        return true;
-    });
-    while (newBoard.length < HEIGHT) {
-        newBoard.unshift(Array(WIDTH).fill(0));
-    }
-    return { board: newBoard, lines };
+function simulatePlacement(board, shape, x) {
+    const cells = shapeToCells(shape);
+    const y = Model.gravityY(board, cells, x, WIDTH, HEIGHT);
+    if (y === null) return null;
+    const merged = Model.applyPlacement(board, cells, x, y);
+    const cleared = Model.clearLines(merged, WIDTH, HEIGHT);
+    return { board: cleared.grid, lines: cleared.cleared, y };
 }
 
 // ==============================
@@ -121,6 +91,9 @@ function getColumnHeights(board) {
 }
 
 function countHoles(board) {
+    if (Model && Model.holeSet) {
+        return Model.holeSet(board, WIDTH, HEIGHT).size;
+    }
     let holes = 0;
     for (let x = 0; x < WIDTH; x++) {
         let blockFound = false;
@@ -386,16 +359,13 @@ function playOneGame(weights) {
         for (let r = 0; r < 4; r++) {
             const width = currentShape[0].length;
             for (let x = 0; x <= WIDTH - width; x++) {
-                const y = getDropY(board, currentShape, x);
-                if (isValid(board, currentShape, x, y)) {
-                    const nextBoard = lockPiece(board, currentShape, x, y);
-                    const res = removeLines(nextBoard);
-                    const score = evaluateBoard(res.board, res.lines, weights);
+                const placement = simulatePlacement(board, currentShape, x);
+                if (!placement) continue;
+                const score = evaluateBoard(placement.board, placement.lines, weights);
 
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestMove = { x, y, shape: currentShape, board: res.board, lines: res.lines };
-                    }
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMove = { x, y: placement.y, shape: currentShape, board: placement.board, lines: placement.lines };
                 }
             }
             // Rotación EXACTA copiada de tetris.js para alinear la física
