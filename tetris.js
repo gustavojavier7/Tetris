@@ -2267,7 +2267,12 @@ this.executeMoveSmoothly = function(move) {
 
         function getPitDepth(heights) {
                 const maxHeight = getMaxHeight(heights);
-                return heights.reduce((sum, h) => sum + (maxHeight - h), 0);
+                let maxPit = 0;
+                for (let h of heights) {
+                        const pit = maxHeight - h;
+                        if (pit > maxPit) maxPit = pit;
+                }
+                return maxPit;
         }
 
         function getFlatness(heights) {
