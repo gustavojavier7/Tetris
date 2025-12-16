@@ -368,7 +368,7 @@ function playOneGame(weights) {
                     bestMove = { x, y: placement.y, shape: currentShape, board: placement.board, lines: placement.lines };
                 }
             }
-            // Rotación EXACTA copiada de tetris.js para alinear la física
+            // ROTATION MUST MATCH tetris.js EXACTLY
             currentShape = rotateGrid(currentShape);
         }
 
@@ -381,21 +381,27 @@ function playOneGame(weights) {
     return { lines: totalLines, moves };
 }
 
-/**
- * Rotación EXACTA copiada de tetris.js para alinear la física de piezas
- */
+// ROTATION MUST MATCH tetris.js EXACTLY
 function rotateGrid(matrix) {
-    const size = matrix.length;
-    const rotated = Array.from({ length: size }, () => Array(size).fill(0));
-    for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-            if (matrix[y][x]) {
-                const newY = size - 1 - x;
-                const newX = y;
+    var size = matrix.length;
+    var rotated = [];
+    for (var y = 0; y < size; y++) {
+        rotated.push([]);
+        for (var x = 0; x < size; x++) {
+            rotated[y].push(0);
+        }
+    }
+
+    for (var y2 = 0; y2 < size; y2++) {
+        for (var x2 = 0; x2 < size; x2++) {
+            if (matrix[y2][x2]) {
+                var newY = size - 1 - x2;
+                var newX = y2;
                 rotated[newY][newX] = 1;
             }
         }
     }
+
     return rotated;
 }
 

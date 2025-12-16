@@ -26,9 +26,13 @@
     return true;
   }
 
+  /**
+   * gravityY(grid, pieceCells, x, W, H, startY?)
+   * If startY is omitted, gravity starts from spawn position
+   */
   function gravityY(grid, pieceCells, x, W, H, startY) {
     var minDy = pieceCells.reduce(function(min, c) { return Math.min(min, c.dy); }, 0);
-    var y = typeof startY === 'number' ? startY : -minDy;
+    var y = (typeof startY === 'number' && isFinite(startY)) ? startY : -minDy;
     if (!placeable(grid, pieceCells, x, y, W, H)) return null;
     while (placeable(grid, pieceCells, x, y + 1, W, H)) {
       y += 1;
@@ -178,9 +182,5 @@
   }
   if (typeof window !== 'undefined') {
     window.TetrisModel = api;
-  }
-
-  if (typeof console !== 'undefined') {
-    console.log('[TetrisModel] self-test result:', __selfTest());
   }
 })(typeof globalThis !== 'undefined' ? globalThis : this);

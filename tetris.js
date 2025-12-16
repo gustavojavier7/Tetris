@@ -2391,7 +2391,7 @@ this.simulateDrop = function(rotation, targetX) {
                 pieceGrid = rotateGrid(pieceGrid);
         }
 
-        var pieceCells = matrixToCells(pieceGrid);
+        var pieceCells = Model.normalizeCells(matrixToCells(pieceGrid));
         var posX = activePuzzle.getX();
         var posY = activePuzzle.getY();
 
@@ -2434,7 +2434,7 @@ function buildPredictedBoard() {
                 var currentPieceGrid = clonePieceGrid(self.tetris.puzzle.board);
                 var posX = self.tetris.puzzle.getX();
                 var posY = self.tetris.puzzle.getY();
-                var pieceCells = matrixToCells(currentPieceGrid);
+                var pieceCells = Model.normalizeCells(matrixToCells(currentPieceGrid));
 
                 if (Model.placeable(baseGrid, pieceCells, posX, posY, self.tetris.areaX, self.tetris.areaY)) {
                         var landing = Model.gravityY(baseGrid, pieceCells, posX, self.tetris.areaX, self.tetris.areaY, posY);
@@ -2455,28 +2455,29 @@ function buildPredictedBoard() {
                 return Model.cloneGrid(board.map(function(row) { return row.map(function(cell) { return cell ? 1 : 0; }); }));
         }
 
-	function rotateGrid(matrix) {
-		var size = matrix.length;
-		var rotated = [];
-		for (var y = 0; y < size; y++) {
-			rotated.push([]);
-			for (var x = 0; x < size; x++) {
-				rotated[y].push(0);
-			}
-		}
+        // ROTATION MUST MATCH tetris.js EXACTLY
+        function rotateGrid(matrix) {
+                var size = matrix.length;
+                var rotated = [];
+                for (var y = 0; y < size; y++) {
+                        rotated.push([]);
+                        for (var x = 0; x < size; x++) {
+                                rotated[y].push(0);
+                        }
+                }
 
-		for (var y2 = 0; y2 < size; y2++) {
-			for (var x2 = 0; x2 < size; x2++) {
-				if (matrix[y2][x2]) {
-					var newY = size - 1 - x2;
-					var newX = y2;
-					rotated[newY][newX] = 1;
-				}
-			}
-		}
+                for (var y2 = 0; y2 < size; y2++) {
+                        for (var x2 = 0; x2 < size; x2++) {
+                                if (matrix[y2][x2]) {
+                                        var newY = size - 1 - x2;
+                                        var newX = y2;
+                                        rotated[newY][newX] = 1;
+                                }
+                        }
+                }
 
-		return rotated;
-	}
+                return rotated;
+        }
 
         function matrixToCells(matrix) {
                 var cells = [];
@@ -2485,7 +2486,7 @@ function buildPredictedBoard() {
                                 if (matrix[y][x]) cells.push({ dx: x, dy: y });
                         }
                 }
-                return Model.normalizeCells(cells);
+                return cells;
         }
 
 }
@@ -2515,7 +2516,15 @@ if (typeof window !== "undefined") {
 // --- INICIALIZACIÓN COMPLETA DEL JUEGO ---
 document.addEventListener('DOMContentLoaded', function() {
     console.log('[INIT] 🔧 Inicializando Tetris Moderno con IA-ASSIST...');
-    
+
+    if (window.TetrisModel && typeof window.TetrisModel.__selfTest === 'function') {
+        try {
+            console.log('[MODEL CHECK]', window.TetrisModel.__selfTest());
+        } catch (err) {
+            console.warn('[MODEL CHECK] failed', err);
+        }
+    }
+
     // 1. Crear instancia principal del juego
     window.tetris = new Tetris();
     console.log('[INIT] ✅ Tetris instanciado:', window.tetris);
