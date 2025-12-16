@@ -29,18 +29,18 @@ const PUZZLES = [
 // --- 4. ESTADO GLOBAL DEL ENTRENAMIENTO ---
 let currentBestWeights = {
     LINES_CLEARED: 3.2,
-    HOLES: -2.0,
-    DEEP_HOLES: -1.5,
+    HOLES: -4.0,
+    DEEP_HOLES: -2.5,
     BLOCKED_CELLS: -0.8,
-    AGGREGATE_HEIGHT: -0.51,
+    AGGREGATE_HEIGHT: -1.0,
     MAX_HEIGHT: -0.6,
-    BUMPINESS: -0.45,
+    BUMPINESS: -0.5,
     WELLS: -0.35,
     ROOF: -1.2,
     ROW_TRANSITIONS: -0.3,
     COL_TRANSITIONS: -0.35,
     PIT_DEPTH: -0.5,
-    FLATNESS_BONUS: 0.2
+    FLATNESS_BONUS: 0.8
 };
 
 let bestFitness = -Infinity;
