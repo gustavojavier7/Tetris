@@ -2376,10 +2376,19 @@ this.executeMoveSmoothly = function(move) {
 
                                 const holes = Model.newHoles(baseGrid, gridAfter, W, H);
                                 const dist = Model.minManhattanToSet(candidate.pieceCells, candidate.x, candidate.y, targetSet);
-                                const key = [holes, dist];
+                                const contacts = Model.countContactPoints(
+                                        baseGrid,
+                                        candidate.pieceCells,
+                                        candidate.x,
+                                        candidate.y,
+                                        W,
+                                        H
+                                );
 
-                                if (!best || key[0] < best.key[0] || (key[0] === best.key[0] && key[1] < best.key[1])) {
-                                        best = { candidate: candidate, key: key };
+                                const score = (holes * 20.0) + (dist * 1.0) - (contacts * 2.0);
+
+                                if (!best || score < best.score) {
+                                        best = { candidate: candidate, score: score, meta: { holes, dist, contacts } };
                                 }
                         }
 
@@ -2388,8 +2397,10 @@ this.executeMoveSmoothly = function(move) {
                                         console.log('[PARCHE A] seleccionado',
                                                 'rot=', best.candidate.rotation,
                                                 'x=', best.candidate.x,
-                                                'Hnew=', best.key[0],
-                                                'dist=', best.key[1]
+                                                'score=', best.score,
+                                                'Hnew=', best.meta.holes,
+                                                'dist=', best.meta.dist,
+                                                'contact=', best.meta.contacts
                                         );
                                 }
                                 return { rotation: best.candidate.rotation, x: best.candidate.x };
