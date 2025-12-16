@@ -2357,7 +2357,7 @@ this.executeMoveSmoothly = function(move) {
                         const W = self.tetris.areaX;
                         const H = self.tetris.areaY;
                         const baseGrid = cloneAreaGrid(referenceBoard);
-                        const peak = Model.peakCell(baseGrid, W, H) || { x: Math.floor(W / 2), y: H - 1 };
+                        const targetSet = Model.getLowestFreeCells(baseGrid, W, H);
 
                         let best = null;
 
@@ -2375,7 +2375,7 @@ this.executeMoveSmoothly = function(move) {
                                 }
 
                                 const holes = Model.newHoles(baseGrid, gridAfter, W, H);
-                                const dist = Model.minManhattanToCell(candidate.pieceCells, candidate.x, candidate.y, peak);
+                                const dist = Model.minManhattanToSet(candidate.pieceCells, candidate.x, candidate.y, targetSet);
                                 const key = [holes, dist];
 
                                 if (!best || key[0] < best.key[0] || (key[0] === best.key[0] && key[1] < best.key[1])) {

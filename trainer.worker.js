@@ -388,7 +388,7 @@ function playOneGame(weights) {
         // PARCHE B: Alineación con la política del bot cuando no se limpian líneas
         if (Model && maxLinesCleared === 0) {
             const baseGrid = board;
-            const peak = Model.peakCell(baseGrid, WIDTH, HEIGHT) || { x: Math.floor(WIDTH / 2), y: HEIGHT - 1 };
+            const targetSet = Model.getLowestFreeCells(baseGrid, WIDTH, HEIGHT);
             let best = null;
 
             for (const candidate of candidates) {
@@ -396,7 +396,7 @@ function playOneGame(weights) {
                 if (!candidate.pieceCells || candidate.pieceCells.length === 0) continue;
 
                 const holes = Model.newHoles(baseGrid, candidate.boardAfter, WIDTH, HEIGHT);
-                const dist = Model.minManhattanToCell(candidate.pieceCells, candidate.x, candidate.y, peak);
+                const dist = Model.minManhattanToSet(candidate.pieceCells, candidate.x, candidate.y, targetSet);
                 const key = [holes, dist];
 
                 if (!best ||
