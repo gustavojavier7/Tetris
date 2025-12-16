@@ -70,7 +70,13 @@ function simulatePlacement(board, shape, x) {
     if (y === null) return null;
     const merged = Model.applyPlacement(board, cells, x, y);
     const cleared = Model.clearLines(merged, WIDTH, HEIGHT);
-    return { board: cleared.grid, lines: cleared.cleared, y };
+    return {
+        boardAfter: merged,
+        boardAfterClear: cleared.grid,
+        linesCleared: cleared.cleared,
+        y,
+        pieceCells: cells,
+    };
 }
 
 // ==============================
@@ -350,10 +356,8 @@ function playOneGame(weights) {
         const typeIdx = Math.floor(Math.random() * PUZZLES.length);
         const shape = PUZZLES[typeIdx];
 
-        let bestScore = -Infinity;
-        let bestMove = null;
-
         let currentShape = shape;
+        let candidates = [];
         
         // Probar las 4 rotaciones con la lógica EXACTA de tetris.js
         for (let r = 0; r < 4; r++) {
@@ -361,21 +365,79 @@ function playOneGame(weights) {
             for (let x = 0; x <= WIDTH - width; x++) {
                 const placement = simulatePlacement(board, currentShape, x);
                 if (!placement) continue;
-                const score = evaluateBoard(placement.board, placement.lines, weights);
-
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestMove = { x, y: placement.y, shape: currentShape, board: placement.board, lines: placement.lines };
-                }
+                candidates.push({
+                    rotation: r,
+                    x,
+                    y: placement.y,
+                    linesCleared: placement.linesCleared,
+                    boardAfter: placement.boardAfter,
+                    boardAfterClear: placement.boardAfterClear,
+                    pieceCells: placement.pieceCells,
+                });
             }
             // ROTATION MUST MATCH tetris.js EXACTLY
             currentShape = rotateGrid(currentShape);
         }
 
-        if (!bestMove) break;
+        if (candidates.length === 0) break;
 
-        board = bestMove.board;
-        totalLines += bestMove.lines;
+        const maxLinesCleared = Math.max(...candidates.map(c => c.linesCleared || 0));
+
+        let chosen = null;
+
+        // PARCHE B: Alineación con la política del bot cuando no se limpian líneas
+        if (Model && maxLinesCleared === 0) {
+            const baseGrid = board;
+            const peak = Model.peakCell(baseGrid, WIDTH, HEIGHT) || { x: Math.floor(WIDTH / 2), y: HEIGHT - 1 };
+            let best = null;
+
+            for (const candidate of candidates) {
+                if (!candidate.boardAfter) continue;
+                if (!candidate.pieceCells || candidate.pieceCells.length === 0) continue;
+
+                const holes = Model.newHoles(baseGrid, candidate.boardAfter, WIDTH, HEIGHT);
+                const dist = Model.minManhattanToCell(candidate.pieceCells, candidate.x, candidate.y, peak);
+                const key = [holes, dist];
+
+                if (!best ||
+                    key[0] < best.key[0] ||
+                    (key[0] === best.key[0] && key[1] < best.key[1])) {
+                    best = { candidate, key };
+                }
+            }
+
+            if (best && best.candidate) {
+                if (self && self.debugParcheB) {
+                    console.log('[PARCHE B]',
+                        'x=', best.candidate.x,
+                        'y=', best.candidate.y,
+                        'Hnew=', best.key[0],
+                        'dist=', best.key[1]
+                    );
+                }
+                chosen = best.candidate;
+            }
+        }
+
+        // Heurística solo cuando existe al menos una jugada que limpia líneas
+        if (!chosen && maxLinesCleared > 0) {
+            let bestScore = -Infinity;
+            for (const candidate of candidates) {
+                const evaluation = evaluateBoard(candidate.boardAfterClear, candidate.linesCleared, weights);
+                if (evaluation.score > bestScore) {
+                    bestScore = evaluation.score;
+                    chosen = candidate;
+                }
+            }
+        }
+
+        if (!chosen) break;
+
+        const nextBoard = chosen.boardAfterClear || chosen.boardAfter;
+        if (!nextBoard) break;
+
+        board = nextBoard;
+        totalLines += chosen.linesCleared || 0;
         moves++;
     }
     return { lines: totalLines, moves };
