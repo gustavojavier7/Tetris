@@ -2330,7 +2330,7 @@ this.executeMoveSmoothly = function(move) {
 
                                 const pieceCells = sim.pieceCells || (Model && sim.pieceGrid
                                         ? Model.normalizeCells(matrixToCells(sim.pieceGrid))
-                                        : []);
+                                        : null);
 
                                 candidates.push({
                                         rotation,
@@ -2350,18 +2350,32 @@ this.executeMoveSmoothly = function(move) {
                         return Math.max(acc, c.linesCleared || 0);
                 }, 0);
 
+                // --- PARCHE A ---
+                // Activado únicamente cuando ninguna colocación limpia líneas.
+                // En este modo NO se utiliza scoring heurístico.
                 if (Model && maxLinesCleared === 0) {
                         const W = self.tetris.areaX;
                         const H = self.tetris.areaY;
                         const baseGrid = cloneAreaGrid(referenceBoard);
-                        const peak = Model.peakCell(baseGrid, W, H) || { x: Math.floor(W / 2), y: Math.floor(H / 2) };
+                        const peak = Model.peakCell(baseGrid, W, H) || { x: Math.floor(W / 2), y: H - 1 };
 
                         let best = null;
 
                         for (let i = 0; i < candidates.length; i++) {
                                 const candidate = candidates[i];
-                                const holes = Model.newHoles(baseGrid, candidate.gridAfter, W, H);
-                                const dist = Model.minManhattanToCell(candidate.pieceCells || [], candidate.x, candidate.y, peak);
+                                const gridAfter =
+                                        candidate.gridAfter ||
+                                        candidate.gridAfterPlacement ||
+                                        candidate.grid;
+                                if (!gridAfter) {
+                                        continue;
+                                }
+                                if (!candidate.pieceCells || candidate.pieceCells.length === 0) {
+                                        continue;
+                                }
+
+                                const holes = Model.newHoles(baseGrid, gridAfter, W, H);
+                                const dist = Model.minManhattanToCell(candidate.pieceCells, candidate.x, candidate.y, peak);
                                 const key = [holes, dist];
 
                                 if (!best || key[0] < best.key[0] || (key[0] === best.key[0] && key[1] < best.key[1])) {
@@ -2370,8 +2384,18 @@ this.executeMoveSmoothly = function(move) {
                         }
 
                         if (best && best.candidate) {
+                                if (self.debugParcheA) {
+                                        console.log('[PARCHE A] seleccionado',
+                                                'rot=', best.candidate.rotation,
+                                                'x=', best.candidate.x,
+                                                'Hnew=', best.key[0],
+                                                'dist=', best.key[1]
+                                        );
+                                }
                                 return { rotation: best.candidate.rotation, x: best.candidate.x };
                         }
+
+                        return null;
                 }
 
                 // Encontrar la jugada con el SCORE MÁS ALTO (mejor evaluación)
