@@ -2315,6 +2315,8 @@ this.executeMoveSmoothly = function(move) {
                 if (!area || !puzzle) return null;
                 let candidates = [];
 
+                const referenceBoard = self.predictedBoard || area.board;
+
                 // Lookahead: Considerar la próxima pieza (simplificado a la mejor posición para la actual basada en la siguiente)
                 // Para simplificar, iteramos sobre la pieza actual (puzzle.type)
                 // Si se quisiera lookahead real con la siguiente (puzzle.nextType), se complicaría significativamente el bucle.
@@ -2323,20 +2325,54 @@ this.executeMoveSmoothly = function(move) {
                         for (let x = 0; x < self.tetris.areaX; x++) {
                                 const sim = self.simulateDrop(rotation, x);
                                 if (!sim.isValid) continue;
-                                // La simulación ya da el estado del tablero después de que CAIGA la pieza actual
-                                // Evaluamos ese estado final
+
                                 const evaluation = self.evaluatePosition(sim.grid, sim.linesCleared);
+
+                                const pieceCells = sim.pieceCells || (Model && sim.pieceGrid
+                                        ? Model.normalizeCells(matrixToCells(sim.pieceGrid))
+                                        : []);
 
                                 candidates.push({
                                         rotation,
                                         x,
+                                        y: sim.finalY,
+                                        linesCleared: sim.linesCleared,
+                                        gridAfter: sim.gridAfterPlacement,
+                                        pieceCells: pieceCells,
                                         score: evaluation.score,
-                                        // No es necesario almacenar otros valores aquí si solo se usa el score para ordenar
                                 });
                         }
                 }
 
                 if (candidates.length === 0) return null;
+
+                const maxLinesCleared = candidates.reduce(function(acc, c) {
+                        return Math.max(acc, c.linesCleared || 0);
+                }, 0);
+
+                if (Model && maxLinesCleared === 0) {
+                        const W = self.tetris.areaX;
+                        const H = self.tetris.areaY;
+                        const baseGrid = cloneAreaGrid(referenceBoard);
+                        const peak = Model.peakCell(baseGrid, W, H) || { x: Math.floor(W / 2), y: Math.floor(H / 2) };
+
+                        let best = null;
+
+                        for (let i = 0; i < candidates.length; i++) {
+                                const candidate = candidates[i];
+                                const holes = Model.newHoles(baseGrid, candidate.gridAfter, W, H);
+                                const dist = Model.minManhattanToCell(candidate.pieceCells || [], candidate.x, candidate.y, peak);
+                                const key = [holes, dist];
+
+                                if (!best || key[0] < best.key[0] || (key[0] === best.key[0] && key[1] < best.key[1])) {
+                                        best = { candidate: candidate, key: key };
+                                }
+                        }
+
+                        if (best && best.candidate) {
+                                return { rotation: best.candidate.rotation, x: best.candidate.x };
+                        }
+                }
 
                 // Encontrar la jugada con el SCORE MÁS ALTO (mejor evaluación)
                 let bestCandidate = candidates[0]; // Inicializar con el primero
@@ -2420,7 +2456,7 @@ this.simulateDrop = function(rotation, targetX) {
         var mergedGrid = Model.applyPlacement(areaGrid, pieceCells, posX, landingY);
         var cleared = Model.clearLines(mergedGrid, self.tetris.areaX, self.tetris.areaY);
 
-        return logResult({ isValid: true, grid: cleared.grid, linesCleared: cleared.cleared, finalX: posX, finalY: landingY, pieceGrid: pieceGrid });
+        return logResult({ isValid: true, grid: cleared.grid, linesCleared: cleared.cleared, finalX: posX, finalY: landingY, pieceGrid: pieceGrid, pieceCells: pieceCells, gridAfterPlacement: mergedGrid });
                         };
 
 // Construye el tablero proyectado incluyendo la posición final de la pieza humana.
