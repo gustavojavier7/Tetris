@@ -28,16 +28,19 @@ const PUZZLES = [
 
 // --- 4. ESTADO GLOBAL DEL ENTRENAMIENTO ---
 let currentBestWeights = {
-    lines: 100,
-    holes: -400,
-    blocked: -80,
-    rowTrans: -40,
-    colTrans: -40,
-    bumpiness: -5,
-    bumpRisk: 1000,
-    aggHeight: -4,
-    wells: -20,
-    landingHeight: 5
+    LINES_CLEARED: 3.2,
+    HOLES: -2.0,
+    DEEP_HOLES: -1.5,
+    BLOCKED_CELLS: -0.8,
+    AGGREGATE_HEIGHT: -0.51,
+    MAX_HEIGHT: -0.6,
+    BUMPINESS: -0.45,
+    WELLS: -0.35,
+    ROOF: -1.2,
+    ROW_TRANSITIONS: -0.3,
+    COL_TRANSITIONS: -0.35,
+    PIT_DEPTH: -0.5,
+    FLATNESS_BONUS: 0.2
 };
 
 let bestFitness = -Infinity;
@@ -100,17 +103,145 @@ function removeLines(board) {
     return { board: newBoard, lines };
 }
 
-// --- 6. FUNCIONES AUXILIARES DE EVALUACIÓN (SIN CAMBIOS) ---
+// ==============================
+// HEURISTIC METRICS (shared)
+// ==============================
 
-function calculateWells(heights) {
+function getColumnHeights(board) {
+    const heights = new Array(WIDTH).fill(0);
+    for (let x = 0; x < WIDTH; x++) {
+        for (let y = 0; y < HEIGHT; y++) {
+            if (board[y][x]) {
+                heights[x] = HEIGHT - y;
+                break;
+            }
+        }
+    }
+    return heights;
+}
+
+function countHoles(board) {
+    let holes = 0;
+    for (let x = 0; x < WIDTH; x++) {
+        let blockFound = false;
+        for (let y = 0; y < HEIGHT; y++) {
+            if (board[y][x]) {
+                blockFound = true;
+            } else if (blockFound) {
+                holes++;
+            }
+        }
+    }
+    return holes;
+}
+
+function countDeepHoles(board) {
+    let deepHoles = 0;
+    for (let x = 0; x < WIDTH; x++) {
+        let blocksAbove = 0;
+        for (let y = 0; y < HEIGHT; y++) {
+            if (board[y][x]) {
+                blocksAbove++;
+            } else if (blocksAbove > 1) {
+                deepHoles++;
+            }
+        }
+    }
+    return deepHoles;
+}
+
+function countBlockedCells(board) {
+    let blocked = 0;
+    for (let x = 0; x < WIDTH; x++) {
+        let holeFound = false;
+        for (let y = HEIGHT - 1; y >= 0; y--) {
+            if (!board[y][x]) {
+                holeFound = true;
+            } else if (holeFound) {
+                blocked++;
+            }
+        }
+    }
+    return blocked;
+}
+
+function countWells(board, heights = getColumnHeights(board)) {
     let wells = 0;
     for (let x = 0; x < WIDTH; x++) {
-        let leftH = (x === 0) ? Infinity : heights[x - 1];
-        let rightH = (x === WIDTH - 1) ? Infinity : heights[x + 1];
-        let wellDepth = Math.max(0, Math.min(leftH, rightH) - heights[x]);
+        const leftH = x === 0 ? Infinity : heights[x - 1];
+        const rightH = x === WIDTH - 1 ? Infinity : heights[x + 1];
+        const wellDepth = Math.max(0, Math.min(leftH, rightH) - heights[x]);
         wells += wellDepth;
     }
     return wells;
+}
+
+function getBumpiness(heights) {
+    let bumpiness = 0;
+    for (let x = 0; x < heights.length - 1; x++) {
+        bumpiness += Math.abs(heights[x] - heights[x + 1]);
+    }
+    return bumpiness;
+}
+
+function getAggregateHeight(heights) {
+    return heights.reduce((sum, h) => sum + h, 0);
+}
+
+function getMaxHeight(heights) {
+    return heights.reduce((max, h) => Math.max(max, h), 0);
+}
+
+function countRowTransitions(board) {
+    let transitions = 0;
+    for (let y = 0; y < HEIGHT; y++) {
+        let prev = 1;
+        for (let x = 0; x < WIDTH; x++) {
+            const filled = board[y][x] ? 1 : 0;
+            if (filled !== prev) transitions++;
+            prev = filled;
+        }
+        if (prev === 0) transitions++;
+    }
+    return transitions;
+}
+
+function countColTransitions(board) {
+    let transitions = 0;
+    for (let x = 0; x < WIDTH; x++) {
+        let prev = 1;
+        for (let y = HEIGHT - 1; y >= 0; y--) {
+            const filled = board[y][x] ? 1 : 0;
+            if (filled !== prev) transitions++;
+            prev = filled;
+        }
+    }
+    return transitions;
+}
+
+function countRoofedHoles(board) {
+    let roofed = 0;
+    for (let x = 0; x < WIDTH; x++) {
+        for (let y = 1; y < HEIGHT; y++) {
+            if (!board[y][x] && board[y - 1][x]) {
+                roofed++;
+            }
+        }
+    }
+    return roofed;
+}
+
+function getPitDepth(heights) {
+    const maxHeight = getMaxHeight(heights);
+    return heights.reduce((sum, h) => sum + (maxHeight - h), 0);
+}
+
+function getFlatness(heights) {
+    if (!heights.length) return 0;
+    const avg = heights.reduce((sum, h) => sum + h, 0) / heights.length;
+    const variance = heights.reduce((sum, h) => sum + Math.pow(h - avg, 2), 0) / heights.length;
+    const stdDev = Math.sqrt(variance);
+    return 1 / (1 + stdDev);
 }
 
 // --- 7. LÓGICA GENÉTICA NUEVA ---
@@ -158,32 +289,42 @@ function crossover(parentA, parentB) {
     return child;
 }
 
+const WEIGHT_RANGES = {
+    LINES_CLEARED: [0, 6],
+    HOLES: [-3, 0],
+    DEEP_HOLES: [-3, 0],
+    BLOCKED_CELLS: [-2, 0],
+    AGGREGATE_HEIGHT: [-1.5, 0],
+    MAX_HEIGHT: [-1.5, 0],
+    BUMPINESS: [-1.2, 0],
+    WELLS: [-1, 0],
+    ROOF: [-2, 0],
+    ROW_TRANSITIONS: [-1, 0],
+    COL_TRANSITIONS: [-1, 0],
+    PIT_DEPTH: [-1.5, 0],
+    FLATNESS_BONUS: [0, 1]
+};
+
+function gaussianNoise() {
+    let u = 0;
+    let v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+}
+
 /**
  * Mutación Controlada: modifica pesos de forma aleatoria con límites para evitar valores extremos
  */
 function mutate(weights) {
     const mutated = { ...weights };
-    // Límites razonables para cada peso para evitar sesgos extremos
-    const WEIGHT_BOUNDS = {
-        lines: [50, 200],
-        holes: [-500, -200],
-        blocked: [-100, -30],
-        rowTrans: [-50, -20],
-        colTrans: [-50, -20],
-        bumpiness: [-10, -2],
-        bumpRisk: [500, 1500],
-        aggHeight: [-10, -2],
-        wells: [-30, -10],
-        landingHeight: [2, 10]
-    };
-
     for (const key in mutated) {
         if (Object.prototype.hasOwnProperty.call(mutated, key)) {
             if (Math.random() < TRAINING_CONFIG.MUTATION_RATE) {
-                const delta = mutated[key] * TRAINING_CONFIG.MUTATION_STEP * (Math.random() - 0.5) * 2;
-                mutated[key] += delta;
+                const range = WEIGHT_RANGES[key][1] - WEIGHT_RANGES[key][0];
+                mutated[key] += gaussianNoise() * range * 0.05;
                 // Aplicar límites para evitar pesos extremos que rompan la evaluación
-                mutated[key] = Math.max(WEIGHT_BOUNDS[key][0], Math.min(WEIGHT_BOUNDS[key][1], mutated[key]));
+                mutated[key] = Math.max(WEIGHT_RANGES[key][0], Math.min(WEIGHT_RANGES[key][1], mutated[key]));
             }
         }
     }
@@ -199,92 +340,24 @@ function selectElites(population) {
     return sorted.slice(0, eliteCount);
 }
 
-// --- 8. EVALUACIÓN (SIN CAMBIOS, PERO CON ROTACIÓN ALINEADA) ---
-function evaluateState(board, linesCleared, landingY, weights) {
-    let holes = 0;
-    let blocked = 0;
-    const heights = new Array(WIDTH).fill(0);
-    
-    for (let x = 0; x < WIDTH; x++) {
-        let colHeight = 0;
-        let blockFound = false;
-        let holeFoundBelow = false;
+// --- 8. EVALUACIÓN ---
+function evaluateBoard(board, linesCleared, weights) {
+    const heights = getColumnHeights(board);
 
-        for (let y = 0; y < HEIGHT; y++) {
-            if (board[y][x] !== 0) {
-                if (!blockFound) {
-                    colHeight = HEIGHT - y;
-                    blockFound = true;
-                }
-            } else if (blockFound) {
-                holes++;
-            }
-        }
-        heights[x] = colHeight;
-
-        for (let y = HEIGHT - 1; y >= 0; y--) {
-            if (board[y][x] === 0) {
-                holeFoundBelow = true;
-            } else {
-                if (holeFoundBelow) {
-                    blocked++;
-                }
-            }
-        }
-    }
-
-    let aggHeight = 0;
-    let bumpiness = 0;
-    let wells = 0;
-
-    for (let x = 0; x < WIDTH; x++) {
-        aggHeight += heights[x];
-        if (x < WIDTH - 1) {
-            bumpiness += Math.abs(heights[x] - heights[x + 1]);
-        }
-
-        let leftH = (x === 0) ? Infinity : heights[x - 1];
-        let rightH = (x === WIDTH - 1) ? Infinity : heights[x + 1];
-        let wellDepth = Math.max(0, Math.min(leftH, rightH) - heights[x]);
-        wells += wellDepth;
-    }
-
-    const maxHeight = Math.max(...heights);
-    const normalizedHeight = Math.min(1, maxHeight / HEIGHT);
-    const bumpRisk = Math.pow(normalizedHeight, 4);
-    const dynamicBump = weights.bumpiness - (weights.bumpRisk * bumpRisk);
-
-    let rowTrans = 0;
-    for (let y = 0; y < HEIGHT; y++) {
-        let prev = 1;
-        for (let x = 0; x < WIDTH; x++) {
-            const filled = board[y][x] !== 0 ? 1 : 0;
-            if (filled !== prev) rowTrans++;
-            prev = filled;
-        }
-        if (prev === 0) rowTrans++;
-    }
-
-    let colTrans = 0;
-    for (let x = 0; x < WIDTH; x++) {
-        let prev = 1;
-        for (let y = HEIGHT - 1; y >= 0; y--) {
-            const filled = board[y][x] !== 0 ? 1 : 0;
-            if (filled !== prev) colTrans++;
-            prev = filled;
-        }
-    }
-
-    let score = 0;
-    score += linesCleared * weights.lines;
-    score += landingY * weights.landingHeight;
-    score += holes * weights.holes;
-    score += blocked * weights.blocked;
-    score += rowTrans * weights.rowTrans;
-    score += colTrans * weights.colTrans;
-    score += bumpiness * dynamicBump;
-    score += aggHeight * weights.aggHeight;
-    score += wells * weights.wells;
+    const score =
+        linesCleared * weights.LINES_CLEARED +
+        countHoles(board) * weights.HOLES +
+        countDeepHoles(board) * weights.DEEP_HOLES +
+        countBlockedCells(board) * weights.BLOCKED_CELLS +
+        getAggregateHeight(heights) * weights.AGGREGATE_HEIGHT +
+        getMaxHeight(heights) * weights.MAX_HEIGHT +
+        getBumpiness(heights) * weights.BUMPINESS +
+        countWells(board, heights) * weights.WELLS +
+        countRoofedHoles(board) * weights.ROOF +
+        countRowTransitions(board) * weights.ROW_TRANSITIONS +
+        countColTransitions(board) * weights.COL_TRANSITIONS +
+        getPitDepth(heights) * weights.PIT_DEPTH +
+        getFlatness(heights) * weights.FLATNESS_BONUS;
 
     return score;
 }
@@ -312,11 +385,11 @@ function playOneGame(weights) {
                 if (isValid(board, currentShape, x, y)) {
                     const nextBoard = lockPiece(board, currentShape, x, y);
                     const res = removeLines(nextBoard);
-                    const score = evaluateState(res.board, res.lines, y, weights);
-                    
+                    const score = evaluateBoard(res.board, res.lines, weights);
+
                     if (score > bestScore) {
                         bestScore = score;
-                        bestMove = { x, y, shape: currentShape };
+                        bestMove = { x, y, shape: currentShape, board: res.board, lines: res.lines };
                     }
                 }
             }
@@ -326,9 +399,8 @@ function playOneGame(weights) {
 
         if (!bestMove) break;
 
-        board = lockPiece(board, bestMove.shape, bestMove.x, bestMove.y);
-        const clearRes = removeLines(board);
-        totalLines += clearRes.lines;
+        board = bestMove.board;
+        totalLines += bestMove.lines;
         moves++;
     }
     return totalLines;
@@ -390,7 +462,7 @@ function trainStep() {
         currentBestWeights = { ...globalBest.weights };
 
         self.postMessage({
-            type: 'NEW_WEIGHTS',
+            type: 'BEST_WEIGHTS',
             weights: currentBestWeights,
             fitness: bestFitness,
         });
