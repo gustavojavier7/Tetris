@@ -1834,9 +1834,53 @@ function TetrisBot(tetrisInstance) {
         this.bestBotMove = null; // Movimiento óptimo pendiente de ejecutar
         this.ghostElements = []; // Previsualización de la jugada del bot
 
+        this.weights = {
+                lines: 100,
+                landingHeight: 5,
+                holes: -400,
+                blocked: -80,
+                rowTrans: -40,
+                colTrans: -40,
+                bumpiness: -5,
+                bumpRisk: 1000,
+                aggHeight: -4,
+                wells: -20,
+        };
+
+        this.trainerWorker = null;
+
         const DEFAULT_STRATEGY = 'BALANCED';
 
         var self = this;
+
+        this.initTrainer = function() {
+                if (typeof Worker === "undefined") {
+                        console.warn('[TRAINER] Web Workers no soportados en este entorno.');
+                        return;
+                }
+
+                self.trainerWorker = new Worker("trainer.worker.js");
+
+                self.trainerWorker.onmessage = (e) => {
+                        if (e.data.type === 'NEW_WEIGHTS') {
+                                console.log(`[TRAINER] 🧬 Evolución! Fitness: ${e.data.fitness.toFixed(2)}`);
+                                console.log('[TRAINER] Nuevos Pesos:', e.data.weights);
+
+                                self.weights = e.data.weights;
+
+                                const ind = document.getElementById('bot-strategy-indicator');
+                                if (ind) ind.textContent = `🧬 EVO GEN ${e.data.fitness.toFixed(0)}`;
+                        }
+                };
+
+                self.trainerWorker.postMessage({
+                        command: 'START',
+                        initialWeights: self.weights,
+                });
+                console.log('[TRAINER] Worker de entrenamiento iniciado en segundo plano.');
+        };
+
+        this.initTrainer();
 
         // --- UTILIDADES DE MODO ---
 
@@ -2065,17 +2109,91 @@ this.executeMoveSmoothly = function(move) {
         playStep();
                         };
 
+        // --- FUNCIONES AUXILIARES DE EVALUACIÓN (Sincronizadas con trainer.worker.js) ---
+
+        function calculateColumnHeights(grid) {
+                const ROWS = grid.length;
+                const COLS = grid[0].length;
+                let heights = new Array(COLS).fill(0);
+                for (let x = 0; x < COLS; x++) {
+                        for (let y = 0; y < ROWS; y++) {
+                                if (grid[y][x]) {
+                                        heights[x] = ROWS - y;
+                                        break;
+                                }
+                        }
+                }
+                return heights;
+        }
+
+        function countRowTransitions(grid) {
+                let transitions = 0;
+                const ROWS = grid.length;
+                const COLS = grid[0].length;
+
+                for (let y = 0; y < ROWS; y++) {
+                        let prev = 1;
+                        for (let x = 0; x < COLS; x++) {
+                                const filled = grid[y][x] ? 1 : 0;
+                                if (filled !== prev) {
+                                        transitions++;
+                                }
+                                prev = filled;
+                        }
+                        if (prev === 0) {
+                                transitions++;
+                        }
+                }
+                return transitions;
+        }
+
+        function countColTransitions(grid) {
+                let transitions = 0;
+                const ROWS = grid.length;
+                const COLS = grid[0].length;
+
+                for (let x = 0; x < COLS; x++) {
+                        let prev = 1;
+                        for (let y = ROWS - 1; y >= 0; y--) {
+                                const filled = grid[y][x] ? 1 : 0;
+                                if (filled !== prev) {
+                                        transitions++;
+                                }
+                                prev = filled;
+                        }
+                }
+                return transitions;
+        }
+
+        function countBlockedCells(grid) {
+                let blocked = 0;
+                const ROWS = grid.length;
+                const COLS = grid[0].length;
+
+                for (let x = 0; x < COLS; x++) {
+                        let holeFound = false;
+                        for (let y = ROWS - 1; y >= 0; y--) {
+                                if (!grid[y][x]) {
+                                        holeFound = true;
+                                } else if (holeFound) {
+                                        blocked++;
+                                }
+                        }
+                }
+                return blocked;
+        }
+
         function countHoles(grid) {
                 let holes = 0;
                 const ROWS = grid.length;
                 const COLS = grid[0].length;
 
                 for (let x = 0; x < COLS; x++) {
-                        let blockSeen = false;
+                        let blockFound = false;
                         for (let y = 0; y < ROWS; y++) {
                                 if (grid[y][x]) {
-                                        blockSeen = true;
-                                } else if (blockSeen) {
+                                        blockFound = true;
+                                } else if (blockFound) {
                                         holes++;
                                 }
                         }
@@ -2083,63 +2201,62 @@ this.executeMoveSmoothly = function(move) {
                 return holes;
         }
 
-        function countCaves(grid) {
-                let caves = 0;
-                const rows = grid.length;
-                const cols = grid[0].length;
-
-                for (let y = 0; y < rows; y++) {
-                        for (let x = 0; x < cols; x++) {
-                                if (grid[y][x]) continue;
-
-                                let hasLeftWall = false;
-                                for (let lx = x - 1; lx >= 0; lx--) {
-                                        if (grid[y][lx]) { hasLeftWall = true; break; }
-                                }
-
-                                if (!hasLeftWall) continue;
-
-                                let hasRightWall = false;
-                                for (let rx = x + 1; rx < cols; rx++) {
-                                        if (grid[y][rx]) { hasRightWall = true; break; }
-                                }
-
-                                if (!hasRightWall) continue;
-
-                                const blockedAbove = (y === 0) || !!grid[y - 1][x];
-                                if (blockedAbove) {
-                                        caves++;
-                                }
-                        }
+        function calculateBumpiness(heights) {
+                let bumpiness = 0;
+                for (let x = 0; x < heights.length - 1; x++) {
+                        bumpiness += Math.abs(heights[x] - heights[x + 1]);
                 }
-
-                return caves;
+                return bumpiness;
         }
 
-        function holeDepthSum(grid) {
-                let depthSum = 0;
-                const rows = grid.length;
-                const cols = grid[0].length;
-
-                for (let x = 0; x < cols; x++) {
-                        let filledAbove = 0;
-                        for (let y = 0; y < rows; y++) {
-                                if (grid[y][x]) {
-                                        filledAbove++;
-                                } else if (filledAbove > 0) {
-                                        depthSum += filledAbove;
-                                }
-                        }
+        function calculateWells(heights) {
+                let wells = 0;
+                const COLS = heights.length;
+                for (let x = 0; x < COLS; x++) {
+                        let leftH = (x === 0) ? Infinity : heights[x - 1];
+                        let rightH = (x === COLS - 1) ? Infinity : heights[x + 1];
+                        let wellDepth = Math.max(0, Math.min(leftH, rightH) - heights[x]);
+                        wells += wellDepth;
                 }
-
-                return depthSum;
+                return wells;
         }
+
+        this.evaluatePosition = function(grid, linesCleared, landingY) {
+                const heights = calculateColumnHeights(grid);
+                const holes = countHoles(grid);
+                const blocked = countBlockedCells(grid);
+                const rowTrans = countRowTransitions(grid);
+                const colTrans = countColTransitions(grid);
+                const bumpiness = calculateBumpiness(heights);
+                const wells = calculateWells(heights);
+
+                const aggHeight = heights.reduce((sum, h) => sum + h, 0);
+                const maxHeight = Math.max(...heights);
+
+                const normalizedHeight = Math.min(1, maxHeight / grid.length);
+                const bumpRisk = Math.pow(normalizedHeight, 4);
+                const currentBumpCoeff = this.weights.bumpiness - (this.weights.bumpRisk * bumpRisk);
+
+                const landingHeight = grid.length - landingY;
+
+                let score = 0;
+                score += linesCleared * this.weights.lines;
+                score += landingHeight * this.weights.landingHeight;
+                score += holes * this.weights.holes;
+                score += blocked * this.weights.blocked;
+                score += rowTrans * this.weights.rowTrans;
+                score += colTrans * this.weights.colTrans;
+                score += bumpiness * currentBumpCoeff;
+                score += aggHeight * this.weights.aggHeight;
+                score += wells * this.weights.wells;
+
+                return { score };
+        };
 
         this.calculateBestMove = function () {
                 const area = self.tetris.area;
                 const puzzle = self.tetris.puzzle;
                 if (!area || !puzzle) return null;
-                const baseGrid = cloneAreaGrid(area.board);
                 let candidates = [];
 
                 // Lookahead: Considerar la próxima pieza (simplificado a la mejor posición para la actual basada en la siguiente)
@@ -2152,7 +2269,7 @@ this.executeMoveSmoothly = function(move) {
                                 if (!sim.isValid) continue;
                                 // La simulación ya da el estado del tablero después de que CAIGA la pieza actual
                                 // Evaluamos ese estado final
-                                const evaluation = evaluatePosition(sim.grid, sim.linesCleared, sim.finalY);
+                                const evaluation = self.evaluatePosition(sim.grid, sim.linesCleared, sim.finalY);
 
                                 candidates.push({
                                         rotation,
@@ -2377,92 +2494,6 @@ function buildPredictedBoard() {
 		}
 
                 return { grid: newGrid, lines: cleared };
-        }
-
-        // --- FUNCIONES AUXILIARES PARA EVALUACIÓN ---
-        function calculateColumnHeights(grid) {
-                const ROWS = grid.length;
-                const COLS = grid[0].length;
-                let heights = new Array(COLS).fill(0);
-                for (let x = 0; x < COLS; x++) {
-                        for (let y = 0; y < ROWS; y++) {
-                                if (grid[y][x]) {
-                                        heights[x] = ROWS - y; // Altura medida desde abajo
-                                        break; // Romper al encontrar el primer bloque desde arriba
-                                }
-                        }
-                }
-                return heights;
-        }
-
-        function calculateBumpiness(heights) {
-                let bumpiness = 0;
-                for (let x = 0; x < heights.length - 1; x++) {
-                        bumpiness += Math.abs(heights[x] - heights[x + 1]);
-                }
-                return bumpiness;
-        }
-
-        function calculateWells(heights) {
-                let wells = 0;
-                const COLS = heights.length;
-                for (let x = 0; x < COLS; x++) {
-                        // Un pozo es una columna donde ambos lados son más altos
-                        let leftH = (x === 0) ? Infinity : heights[x - 1];
-                        let rightH = (x === COLS - 1) ? Infinity : heights[x + 1];
-                        let wellDepth = Math.max(0, Math.min(leftH, rightH) - heights[x]);
-                        // Aplica penalización solo si hay profundidad de pozo
-                        if (wellDepth > 0) {
-                                // Los pozos exteriores (x=0 o x=end) pueden ser menos perjudiciales o incluso útiles para T-Spins
-                                // Pero como regla general, los pozos centrales son malos. Simplificamos: penalización proporcional.
-                                // La penalización puede ser lineal o cuadrática. Lineal es suficiente para inicio.
-                                wells += wellDepth;
-                        }
-                }
-                return wells;
-        }
-
-
-function evaluatePosition(grid, linesCleared, landingY) {
-                const heights = calculateColumnHeights(grid);
-                const bumpiness = calculateBumpiness(heights);
-                const aggHeight = heights.reduce((sum, h) => sum + h, 0);
-                const wells = calculateWells(heights);
-                const holes = countHoles(grid);
-                const depth = holeDepthSum(grid);
-                
-                // 1. Detectar altura máxima y normalizar (0.0 a 1.0)
-                const maxHeight = Math.max(...heights);
-                const normalizedHeight = Math.min(1, maxHeight / grid.length);
-                
-                // 2. Curva de Riesgo Exponencial (x^4)
-                const bumpRisk = Math.pow(normalizedHeight, 4); 
-
-                // --- CONFIGURACIÓN CORREGIDA ---
-                const linesCoeff = 100;       
-                const landingYCoeff = 5;      // Correcto: Positivo para buscar el fondo
-                const holesCoeff = -400;      
-                const depthCoeff = -150;      
-                
-                // 3. FÓRMULA DE AVERSIÓN REAL:
-                // Base: -5
-                // Castigo Extra por Altura: hasta -1000
-                // Resultado: Suelo = -5, Techo = -1005 (Esto sí detiene al bot)
-                const bumpCoeff = -5 - (1000 * bumpRisk); 
-
-                const aggHeightCoeff = -10;    
-                const wellsCoeff = -50;       
-
-                let score = 0;
-                score += linesCleared * linesCoeff;
-                score += landingY * landingYCoeff;
-                score += holes * holesCoeff;
-                score += depth * depthCoeff;
-                score += bumpiness * bumpCoeff; // Aquí se aplica la aversión dinámica fuerte
-                score += aggHeight * aggHeightCoeff;
-                score += wells * wellsCoeff;
-
-                return { score, heights, aggHeight, bumpiness, wells, holes, depth };
         }
 
 }
