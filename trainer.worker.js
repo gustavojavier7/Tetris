@@ -171,7 +171,7 @@ function evaluateState(board, linesCleared, landingY, weights) {
 
     let score = 0;
     score += linesCleared * weights.lines;
-    score += (HEIGHT - landingY) * weights.landingHeight;
+    score += landingY * weights.landingHeight;
     score += holes * weights.holes;
     score += blocked * weights.blocked;
     score += rowTrans * weights.rowTrans;
