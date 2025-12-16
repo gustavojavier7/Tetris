@@ -1835,16 +1835,19 @@ function TetrisBot(tetrisInstance) {
         this.ghostElements = []; // Previsualización de la jugada del bot
 
         this.weights = {
-                lines: 100,
-                landingHeight: 5,
-                holes: -400,
-                blocked: -80,
-                rowTrans: -40,
-                colTrans: -40,
-                bumpiness: -5,
-                bumpRisk: 1000,
-                aggHeight: -4,
-                wells: -20,
+                LINES_CLEARED: 3.2,
+                HOLES: -2.0,
+                DEEP_HOLES: -1.5,
+                BLOCKED_CELLS: -0.8,
+                AGGREGATE_HEIGHT: -0.51,
+                MAX_HEIGHT: -0.6,
+                BUMPINESS: -0.45,
+                WELLS: -0.35,
+                ROOF: -1.2,
+                ROW_TRANSITIONS: -0.3,
+                COL_TRANSITIONS: -0.35,
+                PIT_DEPTH: -0.5,
+                FLATNESS_BONUS: 0.2,
         };
 
         this.trainerWorker = null;
@@ -1862,7 +1865,7 @@ function TetrisBot(tetrisInstance) {
                 self.trainerWorker = new Worker("trainer.worker.js");
 
                 self.trainerWorker.onmessage = (e) => {
-                        if (e.data.type === 'NEW_WEIGHTS') {
+                        if (e.data.type === 'BEST_WEIGHTS') {
                                 console.log(`[TRAINER] 🧬 Evolución! Fitness: ${e.data.fitness.toFixed(2)}`);
                                 console.log('[TRAINER] Nuevos Pesos:', e.data.weights);
 
@@ -2111,10 +2114,10 @@ this.executeMoveSmoothly = function(move) {
 
         // --- FUNCIONES AUXILIARES DE EVALUACIÓN (Sincronizadas con trainer.worker.js) ---
 
-        function calculateColumnHeights(grid) {
+        function getColumnHeights(grid) {
                 const ROWS = grid.length;
                 const COLS = grid[0].length;
-                let heights = new Array(COLS).fill(0);
+                const heights = new Array(COLS).fill(0);
                 for (let x = 0; x < COLS; x++) {
                         for (let y = 0; y < ROWS; y++) {
                                 if (grid[y][x]) {
@@ -2124,6 +2127,88 @@ this.executeMoveSmoothly = function(move) {
                         }
                 }
                 return heights;
+        }
+
+        function countHoles(grid) {
+                let holes = 0;
+                const ROWS = grid.length;
+                const COLS = grid[0].length;
+
+                for (let x = 0; x < COLS; x++) {
+                        let blockFound = false;
+                        for (let y = 0; y < ROWS; y++) {
+                                if (grid[y][x]) {
+                                        blockFound = true;
+                                } else if (blockFound) {
+                                        holes++;
+                                }
+                        }
+                }
+                return holes;
+        }
+
+        function countDeepHoles(grid) {
+                let deepHoles = 0;
+                const ROWS = grid.length;
+                const COLS = grid[0].length;
+
+                for (let x = 0; x < COLS; x++) {
+                        let blocksAbove = 0;
+                        for (let y = 0; y < ROWS; y++) {
+                                if (grid[y][x]) {
+                                        blocksAbove++;
+                                } else if (blocksAbove > 1) {
+                                        deepHoles++;
+                                }
+                        }
+                }
+                return deepHoles;
+        }
+
+        function countBlockedCells(grid) {
+                let blocked = 0;
+                const ROWS = grid.length;
+                const COLS = grid[0].length;
+
+                for (let x = 0; x < COLS; x++) {
+                        let holeFound = false;
+                        for (let y = ROWS - 1; y >= 0; y--) {
+                                if (!grid[y][x]) {
+                                        holeFound = true;
+                                } else if (holeFound) {
+                                        blocked++;
+                                }
+                        }
+                }
+                return blocked;
+        }
+
+        function countWells(grid, heights = getColumnHeights(grid)) {
+                let wells = 0;
+                const COLS = heights.length;
+                for (let x = 0; x < COLS; x++) {
+                        const leftH = x === 0 ? Infinity : heights[x - 1];
+                        const rightH = x === COLS - 1 ? Infinity : heights[x + 1];
+                        const wellDepth = Math.max(0, Math.min(leftH, rightH) - heights[x]);
+                        wells += wellDepth;
+                }
+                return wells;
+        }
+
+        function getBumpiness(heights) {
+                let bumpiness = 0;
+                for (let x = 0; x < heights.length - 1; x++) {
+                        bumpiness += Math.abs(heights[x] - heights[x + 1]);
+                }
+                return bumpiness;
+        }
+
+        function getAggregateHeight(heights) {
+                return heights.reduce((sum, h) => sum + h, 0);
+        }
+
+        function getMaxHeight(heights) {
+                return heights.reduce((max, h) => Math.max(max, h), 0);
         }
 
         function countRowTransitions(grid) {
@@ -2165,88 +2250,51 @@ this.executeMoveSmoothly = function(move) {
                 return transitions;
         }
 
-        function countBlockedCells(grid) {
-                let blocked = 0;
+        function countRoofedHoles(grid) {
+                let roofed = 0;
                 const ROWS = grid.length;
                 const COLS = grid[0].length;
 
                 for (let x = 0; x < COLS; x++) {
-                        let holeFound = false;
-                        for (let y = ROWS - 1; y >= 0; y--) {
-                                if (!grid[y][x]) {
-                                        holeFound = true;
-                                } else if (holeFound) {
-                                        blocked++;
+                        for (let y = 1; y < ROWS; y++) {
+                                if (!grid[y][x] && grid[y - 1][x]) {
+                                        roofed++;
                                 }
                         }
                 }
-                return blocked;
+                return roofed;
         }
 
-        function countHoles(grid) {
-                let holes = 0;
-                const ROWS = grid.length;
-                const COLS = grid[0].length;
-
-                for (let x = 0; x < COLS; x++) {
-                        let blockFound = false;
-                        for (let y = 0; y < ROWS; y++) {
-                                if (grid[y][x]) {
-                                        blockFound = true;
-                                } else if (blockFound) {
-                                        holes++;
-                                }
-                        }
-                }
-                return holes;
+        function getPitDepth(heights) {
+                const maxHeight = getMaxHeight(heights);
+                return heights.reduce((sum, h) => sum + (maxHeight - h), 0);
         }
 
-        function calculateBumpiness(heights) {
-                let bumpiness = 0;
-                for (let x = 0; x < heights.length - 1; x++) {
-                        bumpiness += Math.abs(heights[x] - heights[x + 1]);
-                }
-                return bumpiness;
+        function getFlatness(heights) {
+                if (!heights.length) return 0;
+                const avg = heights.reduce((sum, h) => sum + h, 0) / heights.length;
+                const variance = heights.reduce((sum, h) => sum + Math.pow(h - avg, 2), 0) / heights.length;
+                const stdDev = Math.sqrt(variance);
+                return 1 / (1 + stdDev);
         }
 
-        function calculateWells(heights) {
-                let wells = 0;
-                const COLS = heights.length;
-                for (let x = 0; x < COLS; x++) {
-                        let leftH = (x === 0) ? Infinity : heights[x - 1];
-                        let rightH = (x === COLS - 1) ? Infinity : heights[x + 1];
-                        let wellDepth = Math.max(0, Math.min(leftH, rightH) - heights[x]);
-                        wells += wellDepth;
-                }
-                return wells;
-        }
+        this.evaluatePosition = function(grid, linesCleared) {
+                const heights = getColumnHeights(grid);
 
-        this.evaluatePosition = function(grid, linesCleared, landingY) {
-                const heights = calculateColumnHeights(grid);
-                const holes = countHoles(grid);
-                const blocked = countBlockedCells(grid);
-                const rowTrans = countRowTransitions(grid);
-                const colTrans = countColTransitions(grid);
-                const bumpiness = calculateBumpiness(heights);
-                const wells = calculateWells(heights);
-
-                const aggHeight = heights.reduce((sum, h) => sum + h, 0);
-                const maxHeight = Math.max(...heights);
-
-                const normalizedHeight = Math.min(1, maxHeight / grid.length);
-                const bumpRisk = Math.pow(normalizedHeight, 4);
-                const currentBumpCoeff = this.weights.bumpiness - (this.weights.bumpRisk * bumpRisk);
-
-                let score = 0;
-                score += linesCleared * this.weights.lines;
-                score += landingY * this.weights.landingHeight;
-                score += holes * this.weights.holes;
-                score += blocked * this.weights.blocked;
-                score += rowTrans * this.weights.rowTrans;
-                score += colTrans * this.weights.colTrans;
-                score += bumpiness * currentBumpCoeff;
-                score += aggHeight * this.weights.aggHeight;
-                score += wells * this.weights.wells;
+                const score =
+                        linesCleared * this.weights.LINES_CLEARED +
+                        countHoles(grid) * this.weights.HOLES +
+                        countDeepHoles(grid) * this.weights.DEEP_HOLES +
+                        countBlockedCells(grid) * this.weights.BLOCKED_CELLS +
+                        getAggregateHeight(heights) * this.weights.AGGREGATE_HEIGHT +
+                        getMaxHeight(heights) * this.weights.MAX_HEIGHT +
+                        getBumpiness(heights) * this.weights.BUMPINESS +
+                        countWells(grid, heights) * this.weights.WELLS +
+                        countRoofedHoles(grid) * this.weights.ROOF +
+                        countRowTransitions(grid) * this.weights.ROW_TRANSITIONS +
+                        countColTransitions(grid) * this.weights.COL_TRANSITIONS +
+                        getPitDepth(heights) * this.weights.PIT_DEPTH +
+                        getFlatness(heights) * this.weights.FLATNESS_BONUS;
 
                 return { score };
         };
@@ -2267,7 +2315,7 @@ this.executeMoveSmoothly = function(move) {
                                 if (!sim.isValid) continue;
                                 // La simulación ya da el estado del tablero después de que CAIGA la pieza actual
                                 // Evaluamos ese estado final
-                                const evaluation = self.evaluatePosition(sim.grid, sim.linesCleared, sim.finalY);
+                                const evaluation = self.evaluatePosition(sim.grid, sim.linesCleared);
 
                                 candidates.push({
                                         rotation,
