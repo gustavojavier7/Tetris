@@ -185,6 +185,19 @@ class TetrisGame {
     this.gameOver = false;
     this.lastTime = 0;
 
+    // SISTEMA DE CONTROL NES (Tiempos en milisegundos)
+    this.DAS_DELAY = 267;
+    this.ARR_DELAY = 100;
+    this.ARE_DELAY = 167;
+
+    // Estado de teclas y temporizadores
+    this.keys = { left: false, right: false, down: false };
+    this.dasTimer = 0;
+    this.areTimer = 0;
+    this.softDropTimer = 0;
+    this.fallAccumulator = 0;
+    this.botAccumulator = 0;
+
     this.bag = [];
     this.current = null;
     this.next = null;
@@ -209,7 +222,7 @@ class TetrisGame {
   initActiveBlocks() {
     for (let i = 0; i < 4; i++) {
       const div = document.createElement('div');
-      div.className = 'active-block delay-' + i;
+      div.className = 'active-block';
       div.style.display = 'none';
       this.area.appendChild(div);
       this.activeBlocksDOM.push(div);
@@ -238,6 +251,9 @@ class TetrisGame {
   spawnNewPiece() {
     this.current = this.next || this.getNextPieceType();
     this.next = this.getNextPieceType();
+    this.dasTimer = 0;
+    this.fallAccumulator = 0;
+    this.botAccumulator = 0;
 
     this.current.x = Math.floor(COLS / 2) - Math.floor(this.current.shapes[0][0].length / 2);
     this.current.y = 0;
@@ -248,6 +264,14 @@ class TetrisGame {
       this.gameOver = true;
       this.paused = true;
       this.stopTimer();
+    }
+
+    if (this.gameOver) return;
+
+    if (this.keys.left) {
+      this.move(-1);
+    } else if (this.keys.right) {
+      this.move(1);
     }
 
     this.botThink(); // Calcula ghost si IA activa
@@ -277,42 +301,74 @@ class TetrisGame {
       document.getElementById('iaAssistToggle').classList.toggle('active', this.iaAssist);
       this.updateIndicator();
       if (this.iaAssist) this.botThink();
+      this.botAccumulator = 0;
+      this.fallAccumulator = 0;
+      this.dasTimer = 0;
+      this.keys = { left: false, right: false, down: false };
     };
 
-    // NUEVO: Listener de Teclado
-    document.addEventListener('keydown', (event) => this.handleInput(event));
+    document.addEventListener('keydown', (event) => this.handleKeyDown(event));
+    document.addEventListener('keyup', (event) => this.handleKeyUp(event));
   }
 
-  handleInput(event) {
-    // 1. Pausa funciona siempre (incluso con IA)
+  handleKeyDown(event) {
+    if (['ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp', ' ', 'p', 'P'].includes(event.key)) {
+      event.preventDefault();
+    }
+
     if (event.key.toUpperCase() === 'P') {
       this.togglePause();
       return;
     }
 
-    // 2. Bloqueo: Si está pausado, game over o es turno de la IA, ignorar resto
     if (this.paused || this.gameOver || this.iaAssist) return;
+    const pieceReady = this.current && this.areTimer === 0;
 
-    // 3. Mapeo de Acciones
     switch (event.key) {
       case 'ArrowLeft':
-        this.move(-1);
+        if (!this.keys.left) {
+          this.keys.left = true;
+          this.keys.right = false;
+          if (pieceReady) this.move(-1);
+          this.dasTimer = 0;
+        }
         break;
       case 'ArrowRight':
-        this.move(1);
+        if (!this.keys.right) {
+          this.keys.right = true;
+          this.keys.left = false;
+          if (pieceReady) this.move(1);
+          this.dasTimer = 0;
+        }
         break;
       case 'ArrowDown':
-        this.softDrop();
+        this.keys.down = true;
         break;
       case 'ArrowUp':
-        this.rotate();
+        if (pieceReady) this.rotate();
         break;
-      case ' ': // Space
-        this.hardDrop();
+      case ' ':
+        if (pieceReady) this.hardDrop();
         break;
       case 'c':
       case 'C':
         this.holdPiece();
+        break;
+    }
+  }
+
+  handleKeyUp(event) {
+    switch (event.key) {
+      case 'ArrowLeft':
+        this.keys.left = false;
+        this.dasTimer = 0;
+        break;
+      case 'ArrowRight':
+        this.keys.right = false;
+        this.dasTimer = 0;
+        break;
+      case 'ArrowDown':
+        this.keys.down = false;
         break;
     }
   }
@@ -326,7 +382,7 @@ class TetrisGame {
     // 1. Limpieza NO Destructiva (Fix Crítico)
     // En lugar de borrar todo (innerHTML = ''), buscamos y eliminamos
     // solo los bloques que NO son parte de la pieza activa persistente.
-    // Esto mantiene vivos los nodos .active-block y permite que CSS haga la transición.
+    // Esto mantiene vivos los nodos .active-block para actualizaciones inmediatas.
     const junkBlocks = this.area.querySelectorAll('div:not(.active-block)');
     junkBlocks.forEach(el => el.remove());
 
@@ -346,7 +402,7 @@ class TetrisGame {
 
     // 4. Actualizar visuales de la pieza activa
     // Aquí es donde ocurre la magia: solo cambiamos las coordenadas (top/left)
-    // y el CSS .active-block con transition se encarga del movimiento suave.
+    // y los bloques se tele-transportan sin interpolación para reflejar el NES.
     if (this.current) {
       this.updateActivePieceVisuals();
     } else {
@@ -381,7 +437,7 @@ class TetrisGame {
       row.forEach((val, dx) => {
         if (val && blockIndex < 4) {
           const block = this.activeBlocksDOM[blockIndex];
-          block.className = `active-block delay-${blockIndex} ${BLOCK_CLASSES[this.current.typeId]} bot-controlled`;
+          block.className = `active-block ${BLOCK_CLASSES[this.current.typeId]} bot-controlled`;
           block.style.left = `${(this.current.x + dx) * UNIT}px`;
           block.style.top = `${(this.current.y + dy) * UNIT}px`;
           block.style.display = 'block';
@@ -552,14 +608,15 @@ class TetrisGame {
   }
 
   move(dir) {
+    if (!this.current || this.areTimer > 0) return;
     if (!this.collides(this.current.matrix, this.current.x + dir, this.current.y)) {
       this.current.x += dir;
-      // Importante: Actualizar visuales para disparar la interpolación CSS
       this.render(); 
     }
   }
 
   rotate() {
+    if (!this.current || this.areTimer > 0) return;
     // Calcular siguiente índice de rotación
     const nextRotation = (this.current.rotation + 1) % this.current.shapes.length;
     const nextMatrix = this.current.shapes[nextRotation];
@@ -574,6 +631,7 @@ class TetrisGame {
   }
 
   softDrop() {
+    if (!this.current || this.areTimer > 0) return;
     if (!this.collides(this.current.matrix, this.current.x, this.current.y + 1)) {
       this.current.y++;
       this.score += 1; // Puntos extra por acelerar
@@ -582,6 +640,7 @@ class TetrisGame {
   }
 
   hardDrop() {
+    if (!this.current || this.areTimer > 0) return;
     // Reutilizamos getDropY() que ya tenías para el Ghost
     const y = this.getDropY();
     this.score += (y - this.current.y) * 2; // Puntos extra
@@ -641,7 +700,7 @@ class TetrisGame {
   }
 
   executeBotMove() {
-    if (!this.ghost) return;
+    if (!this.iaAssist || !this.ghost || !this.current || this.areTimer > 0) return;
     
     // 1. Aplicar la transformación geométrica elegida
     this.current.matrix = this.ghost.matrix; // Aplicar rotación
@@ -657,6 +716,7 @@ class TetrisGame {
   }
 
   applyGravity() {
+    if (!this.current || this.areTimer > 0) return;
     if (!this.collides(this.current.matrix, this.current.x, this.current.y + 1)) {
       this.current.y++;
       this.render();
@@ -688,9 +748,14 @@ class TetrisGame {
     while (this.board.length < ROWS) {
         this.board.unshift(Array(COLS).fill(-1));
     }
+    this.ghost = null;
 
     // 3. Generar nueva oportunidad
-    this.spawnNewPiece();
+    this.current = null;
+    this.areTimer = this.ARE_DELAY;
+    this.fallAccumulator = 0;
+    this.botAccumulator = 0;
+    this.render();
   }
 
   togglePause() {
@@ -713,6 +778,11 @@ class TetrisGame {
     this.score = 0;
     this.lines = 0;
     this.lastTime = 0;
+    this.areTimer = 0;
+    this.dasTimer = 0;
+    this.fallAccumulator = 0;
+    this.botAccumulator = 0;
+    this.keys = { left: false, right: false, down: false };
     this.elapsedMs = 0;
     this.stopTimer();
     this.updateTimerDisplay();
@@ -723,18 +793,48 @@ class TetrisGame {
   }
 
   loop(time = 0) {
-    if (!this.paused && !this.gameOver) {
-      // Velocidad reactiva: El bot juega rápido (50ms), el humano según nivel
-      const dropInterval = this.iaAssist ? 50 : 1000 - (this.level * 50);
-      const deltaTime = time - (this.lastTime || 0);
+    const deltaTime = this.lastTime ? time - this.lastTime : 0;
+    this.lastTime = time;
 
-      if (deltaTime > dropInterval) {
-        if (this.iaAssist) {
-          this.executeBotMove(); // Ejecución inmediata del plan geométrico
-        } else {
-          this.applyGravity();   // Caída física normal
+    if (!this.paused && !this.gameOver) {
+      if (this.areTimer > 0) {
+        this.areTimer = Math.max(0, this.areTimer - deltaTime);
+      } else {
+        if (!this.current) {
+          this.spawnNewPiece();
         }
-        this.lastTime = time;
+
+        if (this.iaAssist) {
+          const gravitySpeed = Math.max(50, 1000 - (this.level * 50));
+          this.botAccumulator += deltaTime;
+          while (this.botAccumulator >= gravitySpeed) {
+            this.botAccumulator -= gravitySpeed;
+            this.executeBotMove();
+            if (this.areTimer > 0 || !this.current) break;
+          }
+        } else if (this.current) {
+          if (this.keys.left || this.keys.right) {
+            this.dasTimer += deltaTime;
+            if (this.dasTimer >= this.DAS_DELAY) {
+              while (this.dasTimer >= this.DAS_DELAY + this.ARR_DELAY) {
+                this.move(this.keys.left ? -1 : 1);
+                this.dasTimer -= this.ARR_DELAY;
+                if (!this.current || this.areTimer > 0) break;
+              }
+            }
+          } else {
+            this.dasTimer = 0;
+          }
+
+          const gravitySpeed = Math.max(50, 1000 - (this.level * 50));
+          const currentSpeed = this.keys.down ? Math.min(50, gravitySpeed / 10) : gravitySpeed;
+          this.fallAccumulator += deltaTime;
+          while (this.fallAccumulator >= currentSpeed) {
+            this.applyGravity();
+            this.fallAccumulator -= currentSpeed;
+            if (!this.current || this.areTimer > 0) break;
+          }
+        }
       }
     }
     requestAnimationFrame((t) => this.loop(t));
