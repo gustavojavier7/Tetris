@@ -80,8 +80,8 @@ class GeometricEvaluator {
 
     const leftSupport  = touchesLeftWall  || this.hasVerticalSupport(board, left - 1, top, h);
     const rightSupport = touchesRightWall || this.hasVerticalSupport(board, left + w, top, h);
-
-    return leftSupport || rightSupport;
+    // [FIX] Fast-Fail Geométrico: Solo es hueco si hay contención BILATERAL.
+    return leftSupport && rightSupport;
   }
 
   static hasVerticalSupport(board, col, top, h) {
@@ -356,24 +356,37 @@ class TetrisGame {
     const huecoMask = GeometricEvaluator.buildHuecoMask(huecos);
 
     const better = (a, b) => {
-      if (!a) {
-        console.warn('[AGENT][botThink] Fast-Fail: candidato A nulo/indefinido.');
-        return false;
-      }
-      if (!b) {
-        console.warn('[AGENT][botThink] Fast-Fail: base nula, adoptando candidato.');
-        return true;
-      }
-      if (a.lines === 0 && b.lines === 0 && lowestHueco) {
-        if (a.y !== b.y) return a.y > b.y; // más bajo gana
-      }
+      // 0. Validación de Integridad (Fail-Fast)
+      if (!a) return false;
+      if (!b) return true;
+
+      // 1. SUPERVIVENCIA & LIMPIEZA (Prioridad Absoluta)
+      // Si limpiamos líneas, es objetivamente mejor porque reduce entropía.
       if (a.lines !== b.lines) return a.lines > b.lines;
+
+      // 2. INTEGRIDAD ESTRUCTURAL (Seguridad)
+      // Rechazo total a movimientos que creen nuevos agujeros (deudas).
+      // Esta regla ahora domina sobre la profundidad.
       if (a.deltaHoles !== b.deltaHoles) return a.deltaHoles < b.deltaHoles;
-      if (a.holesReduced !== b.holesReduced) return a.holesReduced > b.holesReduced;
-      if (a.huecoFill !== b.huecoFill) return a.huecoFill > b.huecoFill;
+
+      // 3. ESTABILIDAD DEL ENCASTRE (Fricción)
+      // Buscamos el movimiento que toque más superficies (mayor CL).
       if (a.cl !== b.cl) return a.cl > b.cl;
-      if (a.y !== b.y) return a.y > b.y;
+
+      // 4. ESTRATEGIA DE PROFUNDIDAD (Desempate)
+      // Solo si la seguridad estructural es idéntica, miramos la profundidad.
+      
+      // 4a. Afinidad al Objetivo (Si existe un hueco profundo detectado)
+      if (lowestHueco && a.lines === 0 && b.lines === 0) {
+        // Aquí SÍ priorizamos bajar, pero solo porque ya pasamos el filtro de seguridad #2
+        if (a.y !== b.y) return a.y > b.y; 
+      }
+
+      // 4b. Relleno y Gravedad General
+      if (a.huecoFill !== b.huecoFill) return a.huecoFill > b.huecoFill;
+      if (a.y !== b.y) return a.y > b.y; 
       if (a.depthSum !== b.depthSum) return a.depthSum < b.depthSum;
+
       return false;
     };
 
