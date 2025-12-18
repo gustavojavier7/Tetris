@@ -177,6 +177,12 @@ class TetrisGame {
     this.activeBlocksDOM = [];
     this.initActiveBlocks();
 
+    this.botWorker = new Worker('bot.worker.js');
+    this.botWorker.onmessage = (e) => this.handleWorkerMessage(e);
+    this.botRequestId = 0;
+    this.pendingBotRequestId = null;
+    this.isBotThinking = false;
+
     this.score = 0;
     this.lines = 0;
     this.level = 1;
@@ -273,8 +279,11 @@ class TetrisGame {
     } else if (this.keys.right) {
       this.move(1);
     }
+    this.ghost = null;
 
-    this.botThink(); // Calcula ghost si IA activa
+    if (this.iaAssist) {
+      this.requestBotMove();
+    }
     this.renderNext();
   }
 
@@ -299,12 +308,17 @@ class TetrisGame {
     document.getElementById('iaAssistToggle').onclick = () => {
       this.iaAssist = !this.iaAssist;
       document.getElementById('iaAssistToggle').classList.toggle('active', this.iaAssist);
-      this.updateIndicator();
-      if (this.iaAssist) this.botThink();
+      this.pendingBotRequestId = null;
+      this.isBotThinking = false;
+      this.ghost = null;
+      if (this.iaAssist) {
+        this.requestBotMove();
+      }
       this.botAccumulator = 0;
       this.fallAccumulator = 0;
       this.dasTimer = 0;
       this.keys = { left: false, right: false, down: false };
+      this.updateIndicator();
     };
 
     document.addEventListener('keydown', (event) => this.handleKeyDown(event));
@@ -374,8 +388,18 @@ class TetrisGame {
   }
 
   updateIndicator() {
-    this.indicator.textContent = this.iaAssist ? 'IA ACTIVE' : 'MANUAL';
-    this.indicator.className = 'bot-strategy ' + (this.iaAssist ? 'balanced' : '');
+    if (!this.indicator) return;
+    this.indicator.classList.remove('bot-thinking', 'bot-idle', 'balanced');
+    this.indicator.classList.add('bot-strategy');
+
+    if (this.iaAssist) {
+      this.indicator.classList.add('balanced');
+      this.indicator.classList.add(this.isBotThinking ? 'bot-thinking' : 'bot-idle');
+      this.indicator.textContent = this.isBotThinking ? 'CALCULANDO...' : 'LISTO';
+    } else {
+      this.indicator.classList.add('bot-idle');
+      this.indicator.textContent = 'MANUAL';
+    }
   }
 
   render() {
@@ -474,6 +498,48 @@ class TetrisGame {
         }
       });
     });
+  }
+
+  requestBotMove() {
+    if (!this.iaAssist || !this.current || this.isBotThinking || !this.botWorker) return;
+
+    this.isBotThinking = true;
+    this.botRequestId += 1;
+    this.pendingBotRequestId = this.botRequestId;
+    this.updateIndicator();
+
+    try {
+      this.botWorker.postMessage({
+        type: 'THINK',
+        board: this.board.map(row => [...row]),
+        currentTypeId: this.current.typeId,
+        nextTypeId: this.next ? this.next.typeId : null,
+        requestId: this.pendingBotRequestId
+      });
+    } catch (err) {
+      console.warn('[AGENT][requestBotMove] Fast-Fail: no se pudo enviar trabajo al worker.', err);
+      this.isBotThinking = false;
+      this.pendingBotRequestId = null;
+      this.updateIndicator();
+    }
+  }
+
+  handleWorkerMessage(e) {
+    const { type, ghost, requestId } = e.data || {};
+    if (type !== 'DECISION') return;
+    if (this.pendingBotRequestId !== null && requestId !== this.pendingBotRequestId) return;
+
+    this.pendingBotRequestId = null;
+    this.isBotThinking = false;
+
+    if (this.iaAssist) {
+      this.ghost = ghost;
+    } else {
+      this.ghost = null;
+    }
+
+    this.updateIndicator();
+    this.render();
   }
 
   botThink() {
@@ -784,12 +850,16 @@ class TetrisGame {
     this.botAccumulator = 0;
     this.keys = { left: false, right: false, down: false };
     this.elapsedMs = 0;
+    this.isBotThinking = false;
+    this.pendingBotRequestId = null;
+    this.ghost = null;
     this.stopTimer();
     this.updateTimerDisplay();
     document.getElementById('tetris-stats-score').textContent = this.score;
     document.getElementById('tetris-stats-lines').textContent = this.lines;
     this.render();
     this.renderNext();
+    this.updateIndicator();
   }
 
   loop(time = 0) {
@@ -809,7 +879,9 @@ class TetrisGame {
           this.botAccumulator += deltaTime;
           while (this.botAccumulator >= gravitySpeed) {
             this.botAccumulator -= gravitySpeed;
-            this.executeBotMove();
+            if (!this.isBotThinking && this.ghost) {
+              this.executeBotMove();
+            }
             if (this.areTimer > 0 || !this.current) break;
           }
         } else if (this.current) {

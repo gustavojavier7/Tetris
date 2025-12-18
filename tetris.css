@@ -208,6 +208,24 @@ button:active {
 .bot-strategy.balanced { color: #4a90e2; }
 .bot-strategy.zen      { color: #9b59b6; }
 
+/* Animación de pulso para el bot */
+@keyframes blink-green {
+        0% { background-color: #222; color: #fff; border-color: #fff; }
+        50% { background-color: #00ff00; color: #000; border-color: #00ff00; box-shadow: 0 0 8px #00ff00; }
+        100% { background-color: #222; color: #fff; border-color: #fff; }
+}
+
+.bot-thinking {
+        animation: blink-green 0.5s infinite; /* Flash cada 0.5s */
+        font-weight: bold;
+}
+
+/* Estado inactivo/espera */
+.bot-idle {
+        background-color: #222;
+        color: #888;
+}
+
 .game-section {
         background: var(--panel-bg);
         border: 2px solid #000;
