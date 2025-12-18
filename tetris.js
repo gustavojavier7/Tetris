@@ -1,8 +1,8 @@
 // tetris.js - Motor Tetris con Modelo Geométrico Matricial v4.1 Integrado
 // Compatible con indextetris.html y tetriscss.css (render DOM-based)
 
-const COLS = 10;
-const ROWS = 20;
+const COLS = 12;
+const ROWS = 22;
 const UNIT = 20; // Coincide con --unit en CSS
 
 const PIECE_TYPES = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
@@ -99,6 +99,7 @@ class TetrisGame {
     this.area = document.getElementById('tetris-area');
     this.nextBox = document.getElementById('tetris-nextpuzzle');
     this.indicator = document.getElementById('bot-strategy-indicator');
+    this.timerDisplay = document.getElementById('tetris-stats-time');
 
     this.score = 0;
     this.lines = 0;
@@ -112,6 +113,9 @@ class TetrisGame {
     this.current = null;
     this.next = null;
     this.ghost = null;
+    this.elapsedMs = 0;
+    this.timerInterval = null;
+    this.timerAnchor = null;
 
     this.initBag();
     this.next = this.getNextPieceType();
@@ -120,6 +124,7 @@ class TetrisGame {
     this.render();
     this.renderNext();
     this.updateIndicator();
+    this.updateTimerDisplay();
 
     this.bindEvents();
     this.loop();
@@ -155,6 +160,8 @@ class TetrisGame {
 
     if (this.collides(this.current.matrix, this.current.x, this.current.y)) {
       this.gameOver = true;
+      this.paused = true;
+      this.stopTimer();
     }
 
     this.botThink(); // Calcula ghost si IA activa
@@ -369,6 +376,11 @@ class TetrisGame {
 
   togglePause() {
     this.paused = !this.paused;
+    if (this.paused) {
+      this.pauseTimer();
+    } else if (!this.gameOver) {
+      this.resumeTimer();
+    }
   }
 
   reset() {
@@ -380,6 +392,9 @@ class TetrisGame {
     this.gameOver = false;
     this.paused = true;
     this.lastTime = 0;
+    this.elapsedMs = 0;
+    this.stopTimer();
+    this.updateTimerDisplay();
     this.render();
     this.renderNext();
   }
@@ -400,6 +415,49 @@ class TetrisGame {
       }
     }
     requestAnimationFrame((t) => this.loop(t));
+  }
+
+  startTimer() {
+    if (this.timerInterval) return;
+    this.timerAnchor = performance.now();
+    this.timerInterval = setInterval(() => this.tickTimer(), 250);
+  }
+
+  resumeTimer() {
+    if (!this.timerInterval) this.startTimer();
+    this.timerAnchor = performance.now();
+  }
+
+  pauseTimer() {
+    if (this.timerAnchor !== null) {
+      this.elapsedMs += performance.now() - this.timerAnchor;
+      this.timerAnchor = null;
+      this.updateTimerDisplay();
+    }
+  }
+
+  stopTimer() {
+    this.pauseTimer();
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval);
+      this.timerInterval = null;
+    }
+  }
+
+  tickTimer() {
+    if (this.paused || this.gameOver || this.timerAnchor === null) return;
+    const now = performance.now();
+    this.elapsedMs += now - this.timerAnchor;
+    this.timerAnchor = now;
+    this.updateTimerDisplay();
+  }
+
+  updateTimerDisplay() {
+    if (!this.timerDisplay) return;
+    const totalSeconds = Math.floor(this.elapsedMs / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    this.timerDisplay.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
   }
 }
 
