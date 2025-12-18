@@ -36,41 +36,66 @@ class GeometricEvaluator {
   }
 
   static isValidHueco(board, top, left, h, w) {
-    // Techo vacío + vacío interno + apertura total arriba
-    for (let y = 0; y < top + h; y++) {
+    // 1) Volumen interno (incluye techo) completamente vacío
+    for (let y = top; y < top + h; y++) {
       for (let x = left; x < left + w; x++) {
-        if (y < top || board[y][x] !== -1) return false;
+        if (board[y][x] !== -1) return false;
       }
     }
-    // Soporte lateral continuo (al menos uno, pared implícita)
-    const leftOk = left === 0 || this.hasSupportBelow(board, left, top + h);
-    const rightOk = left + w === COLS || this.hasSupportBelow(board, left + w - 1, top + h);
-    return leftOk || rightOk;
-  }
 
-  static hasSupportBelow(board, col, row) {
-    for (let y = row; y < ROWS; y++) {
-      if (board[y][col] !== -1) return true;
+    // 2) Apertura total hacia arriba:
+    // No puede haber ocupados por encima del techo en ninguna columna del hueco
+    for (let x = left; x < left + w; x++) {
+      for (let y = 0; y < top; y++) {
+        if (board[y][x] !== -1) return false;
+      }
     }
-    return true; // Fondo del tablero como soporte
+
+    // 3) Soporte lateral: columnas ADYACENTES, continuidad SOLO en altura del hueco
+    const touchesLeftWall  = (left === 0);
+    const touchesRightWall = (left + w === COLS);
+
+    const leftSupport  = touchesLeftWall  || this.hasVerticalSupport(board, left - 1, top, h);
+    const rightSupport = touchesRightWall || this.hasVerticalSupport(board, left + w, top, h);
+
+    return leftSupport || rightSupport;
   }
 
-  static calculateAgujeros(board) {
-    let total = 0;
-    for (let c = 0; c < COLS; c++) {
-      let roofFound = false;
-      let depth = 0;
-      for (let r = 0; r < ROWS; r++) {
-        if (board[r][c] !== -1) {
-          total += depth;
-          roofFound = true;
-          depth = 0;
-        } else if (roofFound) {
-          depth++;
+  static hasVerticalSupport(board, col, top, h) {
+    if (col < 0 || col >= COLS) return false;
+    for (let y = top; y < top + h; y++) {
+      if (board[y][col] === -1) return false; // debe ser ocupado en TODO el rango del hueco
+    }
+    return true;
+  }
+
+  static countAgujerosCanonicos(board) {
+    let holes = 0;
+    let depthSum = 0;
+
+    for (let x = 0; x < COLS; x++) {
+      let y = 0;
+      while (y < ROWS) {
+        // avanzar sobre ocupados
+        while (y < ROWS && board[y][x] !== -1) y++;
+        if (y >= ROWS) break;
+
+        // segmento de ceros
+        const yStart = y;
+        while (y < ROWS && board[y][x] === -1) y++;
+        const yEnd = y - 1;
+
+        const baseOk = (yEnd + 1 < ROWS) && (board[yEnd + 1][x] !== -1);
+        const roofOk = (yStart === 0) || (board[yStart - 1][x] !== -1);
+
+        if (baseOk && roofOk) {
+          holes++;
+          depthSum += (yEnd - yStart + 1);
         }
       }
     }
-    return total;
+
+    return { holes, depthSum };
   }
 
   static calculateCL(matrix, px, py, board) {
@@ -90,6 +115,30 @@ class GeometricEvaluator {
 
   static getShapeFit(pieceArea, hueco) {
     return hueco ? pieceArea / hueco.area : 0;
+  }
+
+  static buildHuecoMask(huecos) {
+    const mask = Array.from({length: ROWS}, () => Array(COLS).fill(false));
+    for (const hu of huecos) {
+      for (let y = hu.top; y < hu.top + hu.h; y++) {
+        for (let x = hu.left; x < hu.left + hu.w; x++) {
+          mask[y][x] = true;
+        }
+      }
+    }
+    return mask;
+  }
+
+  static countPlacedInHuecos(matrix, px, py, huecoMask) {
+    let c = 0;
+    for (let ry = 0; ry < matrix.length; ry++) {
+      for (let rx = 0; rx < matrix[ry].length; rx++) {
+        if (!matrix[ry][rx]) continue;
+        const y = py + ry, x = px + rx;
+        if (y >= 0 && y < ROWS && x >= 0 && x < COLS && huecoMask[y][x]) c++;
+      }
+    }
+    return c;
   }
 }
 
@@ -256,12 +305,29 @@ class TetrisGame {
   botThink() {
     if (!this.current) return;
     this.ghost = null;
-    
-    let bestScore = -Infinity;
+
+    const pre = GeometricEvaluator.countAgujerosCanonicos(this.board);
+    const huecos = GeometricEvaluator.findHuecos(this.board);
+    const huecoMask = GeometricEvaluator.buildHuecoMask(huecos);
+
+    const better = (a, b) => {
+      if (!b) return true;
+      if (a.lines !== b.lines) return a.lines > b.lines;
+      if (a.deltaHoles !== b.deltaHoles) return a.deltaHoles < b.deltaHoles;
+      if (a.holesReduced !== b.holesReduced) return a.holesReduced > b.holesReduced;
+      if (a.huecoFill !== b.huecoFill) return a.huecoFill > b.huecoFill;
+      if (a.cl !== b.cl) return a.cl > b.cl;
+      if (a.y !== b.y) return a.y > b.y;
+      if (a.depthSum !== b.depthSum) return a.depthSum < b.depthSum;
+      return false;
+    };
+
+    let bestCandidate = null;
+
     // Iteramos por las rotaciones predefinidas en TETROMINOS
     this.current.shapes.forEach((shapeMatrix, rotationIdx) => {
       const width = shapeMatrix[0].length;
-      
+
       // Barrido lateral
       for (let x = -1; x <= COLS - width + 1; x++) {
         // 1. Simular gravedad (Drop Y)
@@ -269,41 +335,54 @@ class TetrisGame {
         while (!this.collides(shapeMatrix, x, y + 1)) {
           y++;
         }
-        
+
         // Si la pieza choca al nacer, posición inválida
         if (this.collides(shapeMatrix, x, y)) continue;
 
-        // 2. Simular Estado Final (Punto 10 Mapa Mental)
-        const simulatedBoard = this.getSimulatedBoard(shapeMatrix, x, y);
-        
-        // 3. Evaluación Geométrica (Puntos 8.3 y 6)
-        // Beneficio: Estabilidad (CL) y Profundidad (y)
-        const cl = GeometricEvaluator.calculateCL(shapeMatrix, x, y, this.board);
-        // Costo: Deuda Estructural (Agujeros)
-        const holes = GeometricEvaluator.calculateAgujeros(simulatedBoard);
-        
-        // Función de Energía (Pesos ajustables)
-        // Valoramos mucho el CL (Estabilidad) y penalizamos fuerte los Agujeros
-        const score = (cl * 2.5) + (y * 1.0) - (holes * 20.0);
+        // 2. Simular Estado Final con limpieza de líneas
+        const {board: simulatedBoard, linesCleared} = this.getSimulatedBoardWithLines(shapeMatrix, x, y);
 
-        if (score > bestScore) {
-          bestScore = score;
-          this.ghost = {
-            typeId: this.current.typeId,
-            matrix: shapeMatrix, // Guardamos la matriz rotada correcta
-            rotation: rotationIdx,
-            x: x,
-            y: y
-          };
+        // 3. Evaluación Geométrica
+        const cl = GeometricEvaluator.calculateCL(shapeMatrix, x, y, this.board);
+        const post = GeometricEvaluator.countAgujerosCanonicos(simulatedBoard);
+        const deltaHoles = post.holes - pre.holes;
+        const holesReduced = Math.max(0, pre.holes - post.holes);
+        const huecoFill = GeometricEvaluator.countPlacedInHuecos(shapeMatrix, x, y, huecoMask);
+
+        const candidate = {
+          lines: linesCleared,
+          deltaHoles,
+          holesReduced,
+          huecoFill,
+          cl,
+          y,
+          depthSum: post.depthSum,
+          matrix: shapeMatrix,
+          rotation: rotationIdx,
+          x
+        };
+
+        if (better(candidate, bestCandidate)) {
+          bestCandidate = candidate;
         }
       }
     });
-    
+
+    if (bestCandidate) {
+      this.ghost = {
+        typeId: this.current.typeId,
+        matrix: bestCandidate.matrix,
+        rotation: bestCandidate.rotation,
+        x: bestCandidate.x,
+        y: bestCandidate.y
+      };
+    }
+
     this.render();
   }
 
-  // Helper necesario para que el evaluador vea el futuro
-  getSimulatedBoard(matrix, px, py) {
+  // Helper necesario para que el evaluador vea el futuro con líneas limpiadas
+  getSimulatedBoardWithLines(matrix, px, py) {
     const clone = this.board.map(row => [...row]);
     matrix.forEach((row, dy) => {
       row.forEach((val, dx) => {
@@ -316,7 +395,14 @@ class TetrisGame {
         }
       });
     });
-    return clone;
+
+    let filtered = clone.filter(row => row.some(cell => cell === -1));
+    const linesCleared = ROWS - filtered.length;
+    while (filtered.length < ROWS) {
+      filtered.unshift(Array(COLS).fill(-1));
+    }
+
+    return {board: filtered, linesCleared};
   }
 
   getDropY() {
