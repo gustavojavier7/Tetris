@@ -311,6 +311,16 @@ class TetrisGame {
 
     const pre = GeometricEvaluator.countAgujerosCanonicos(this.board);
     const huecos = GeometricEvaluator.findHuecos(this.board);
+    // Altura máxima actual del tablero (perfil global)
+    let maxHeight = 0;
+    for (let cx = 0; cx < COLS; cx++) {
+      for (let cy = 0; cy < ROWS; cy++) {
+        if (this.board[cy][cx] !== -1) {
+          maxHeight = Math.max(maxHeight, ROWS - cy);
+          break;
+        }
+      }
+    }
     let lowestHueco = null;
     for (const h of huecos) {
       const yEnd = h.top + h.h - 1;
@@ -320,9 +330,6 @@ class TetrisGame {
         lowestHueco = h;
       }
     }
-    const lowestHuecoHeight = lowestHueco
-      ? ROWS - (lowestHueco.top + lowestHueco.h - 1)
-      : null;
     const huecoMask = GeometricEvaluator.buildHuecoMask(huecos);
 
     const better = (a, b) => {
@@ -359,9 +366,10 @@ class TetrisGame {
 
         // 2. Simular Estado Final con limpieza de líneas
         const {board: simulatedBoard, linesCleared} = this.getSimulatedBoardWithLines(shapeMatrix, x, y);
-        if (linesCleared === 0 && lowestHuecoHeight !== null) {
+        // Filtro de crecimiento relativo (NO suicida)
+        if (linesCleared === 0) {
           const placementHeight = ROWS - y;
-          if (placementHeight > lowestHuecoHeight + 4) continue;
+          if (placementHeight > maxHeight + 4) continue;
         }
 
         // 3. Evaluación Geométrica
