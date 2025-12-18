@@ -103,10 +103,13 @@ class GeometricEvaluator {
     const h = matrix.length;
     const w = matrix[0].length;
     for (let ry = 0; ry < h; ry++) {
+      const gy = py + ry;
+      if (gy < 0 || gy >= ROWS) continue;
+
       for (let rx = 0; rx < w; rx++) {
         if (matrix[ry][rx]) {
-          if (rx === 0 || matrix[ry][rx - 1] || px + rx - 1 < 0 || board[py + ry][px + rx - 1] !== -1) cl++;
-          if (rx === w - 1 || matrix[ry][rx + 1] || px + rx + 1 >= COLS || board[py + ry][px + rx + 1] !== -1) cl++;
+          if (rx === 0 || matrix[ry][rx - 1] || px + rx - 1 < 0 || board[gy][px + rx - 1] !== -1) cl++;
+          if (rx === w - 1 || matrix[ry][rx + 1] || px + rx + 1 >= COLS || board[gy][px + rx + 1] !== -1) cl++;
         }
       }
     }
