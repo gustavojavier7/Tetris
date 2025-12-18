@@ -278,6 +278,43 @@ class TetrisGame {
       this.updateIndicator();
       if (this.iaAssist) this.botThink();
     };
+
+    // NUEVO: Listener de Teclado
+    document.addEventListener('keydown', (event) => this.handleInput(event));
+  }
+
+  handleInput(event) {
+    // 1. Pausa funciona siempre (incluso con IA)
+    if (event.key.toUpperCase() === 'P') {
+      this.togglePause();
+      return;
+    }
+
+    // 2. Bloqueo: Si está pausado, game over o es turno de la IA, ignorar resto
+    if (this.paused || this.gameOver || this.iaAssist) return;
+
+    // 3. Mapeo de Acciones
+    switch (event.key) {
+      case 'ArrowLeft':
+        this.move(-1);
+        break;
+      case 'ArrowRight':
+        this.move(1);
+        break;
+      case 'ArrowDown':
+        this.softDrop();
+        break;
+      case 'ArrowUp':
+        this.rotate();
+        break;
+      case ' ': // Space
+        this.hardDrop();
+        break;
+      case 'c':
+      case 'C':
+        this.holdPiece();
+        break;
+    }
   }
 
   updateIndicator() {
@@ -286,9 +323,15 @@ class TetrisGame {
   }
 
   render() {
-    this.area.innerHTML = '';
-    this.activeBlocksDOM.forEach(block => this.area.appendChild(block));
-    // Locked pieces
+    // 1. Limpieza NO Destructiva (Fix Crítico)
+    // En lugar de borrar todo (innerHTML = ''), buscamos y eliminamos
+    // solo los bloques que NO son parte de la pieza activa persistente.
+    // Esto mantiene vivos los nodos .active-block y permite que CSS haga la transición.
+    const junkBlocks = this.area.querySelectorAll('div:not(.active-block)');
+    junkBlocks.forEach(el => el.remove());
+
+    // 2. Renderizar piezas fijas (Board)
+    // Estas se dibujan de nuevo en cada frame (se podría optimizar, pero está bien así)
     for (let y = 0; y < ROWS; y++) {
       for (let x = 0; x < COLS; x++) {
         if (this.board[y][x] >= 0) {
@@ -296,9 +339,14 @@ class TetrisGame {
         }
       }
     }
-    // Ghost (si IA activa)
+
+    // 3. Renderizar Ghost (si IA activa)
+    // El ghost no necesita animación, así que usamos el método estándar
     if (this.ghost && this.iaAssist) this.renderPieceGhost(this.ghost);
-    // Current piece
+
+    // 4. Actualizar visuales de la pieza activa
+    // Aquí es donde ocurre la magia: solo cambiamos las coordenadas (top/left)
+    // y el CSS .active-block con transition se encarga del movimiento suave.
     if (this.current) {
       this.updateActivePieceVisuals();
     } else {
@@ -501,6 +549,49 @@ class TetrisGame {
     }
 
     this.render();
+  }
+
+  move(dir) {
+    if (!this.collides(this.current.matrix, this.current.x + dir, this.current.y)) {
+      this.current.x += dir;
+      // Importante: Actualizar visuales para disparar la interpolación CSS
+      this.render(); 
+    }
+  }
+
+  rotate() {
+    // Calcular siguiente índice de rotación
+    const nextRotation = (this.current.rotation + 1) % this.current.shapes.length;
+    const nextMatrix = this.current.shapes[nextRotation];
+
+    // Verificar si la rotación es válida (colisión básica)
+    // Nota: Aquí se podrían agregar "Wall Kicks" (intentar mover x-1, x+1) si falla
+    if (!this.collides(nextMatrix, this.current.x, this.current.y)) {
+      this.current.rotation = nextRotation;
+      this.current.matrix = nextMatrix;
+      this.render();
+    }
+  }
+
+  softDrop() {
+    if (!this.collides(this.current.matrix, this.current.x, this.current.y + 1)) {
+      this.current.y++;
+      this.score += 1; // Puntos extra por acelerar
+      this.render();
+    }
+  }
+
+  hardDrop() {
+    // Reutilizamos getDropY() que ya tenías para el Ghost
+    const y = this.getDropY();
+    this.score += (y - this.current.y) * 2; // Puntos extra
+    this.current.y = y;
+    this.lockPiece(); // Fijar inmediatamente
+    this.render();
+  }
+
+  holdPiece() {
+    console.warn('[AGENT] Hold de pieza no implementado.');
   }
 
   // Helper necesario para que el evaluador vea el futuro con líneas limpiadas
