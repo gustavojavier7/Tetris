@@ -484,6 +484,10 @@ class TetrisGame {
     this.board = this.board.filter(row => row.some(cell => cell === -1));
     const linesCleared = ROWS - this.board.length;
     this.score += linesCleared * 100; // Puntuación simple
+    this.lines += linesCleared;
+
+    document.getElementById('tetris-stats-lines').textContent = this.lines;
+    document.getElementById('tetris-stats-score').textContent = this.score;
     while (this.board.length < ROWS) {
         this.board.unshift(Array(COLS).fill(-1));
     }
@@ -509,10 +513,14 @@ class TetrisGame {
     this.spawnNewPiece();
     this.gameOver = false;
     this.paused = true;
+    this.score = 0;
+    this.lines = 0;
     this.lastTime = 0;
     this.elapsedMs = 0;
     this.stopTimer();
     this.updateTimerDisplay();
+    document.getElementById('tetris-stats-score').textContent = this.score;
+    document.getElementById('tetris-stats-lines').textContent = this.lines;
     this.render();
     this.renderNext();
   }

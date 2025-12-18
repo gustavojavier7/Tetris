@@ -217,8 +217,9 @@ button:active {
 }
 
 .game-board {
-	flex: 1;
-	min-height: 0;
+	flex: 0 0 auto;
+	width: calc(var(--unit) * var(--area-x));
+	height: calc(var(--unit) * var(--area-y));
 	background: var(--beige);
 	border: 2px solid #000;
 	box-shadow: inset 2px 2px var(--panel-light), inset -2px -2px var(--panel-dark);
@@ -263,7 +264,26 @@ button:active {
         transform-origin: top left;
 }
 
-.game-grid { display: none; }
+.game-grid {
+	position: absolute;
+	inset: 0;
+	box-sizing: border-box;
+	background-image:
+		linear-gradient(to right, rgba(0, 0, 0, 0.08) var(--grid-stroke), transparent var(--grid-stroke)),
+		linear-gradient(to bottom, rgba(0, 0, 0, 0.08) var(--grid-stroke), transparent var(--grid-stroke));
+	background-size: var(--unit) var(--unit);
+	pointer-events: none;
+}
+
+.game-grid::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 2px;
+	background: #000;
+}
 
 .game-message {
         position: absolute;
@@ -278,16 +298,10 @@ button:active {
 }
 
 #tetris-area {
-        background: var(--beige);
-        position: relative !important;
-        left: 0 !important;
-        top: 0 !important;
-        width: calc(var(--unit) * var(--area-x));
-        height: calc(var(--unit) * var(--area-y));
-        min-width: calc(var(--unit) * var(--area-x));
-        min-height: calc(var(--unit) * var(--area-y));
-        max-width: calc(var(--unit) * var(--area-x));
-        max-height: calc(var(--unit) * var(--area-y));
+	background: transparent;
+        position: absolute !important;
+        inset: 0 !important;
+        pointer-events: none;
         border: 1px solid #000;
 }
 
