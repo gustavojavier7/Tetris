@@ -86,7 +86,7 @@ class GeometricEvaluator {
         const yEnd = y - 1;
 
         const baseOk = (yEnd + 1 < ROWS) && (board[yEnd + 1][x] !== -1);
-        const roofOk = (yStart === 0) || (board[yStart - 1][x] !== -1);
+        const roofOk = (yStart > 0) && (board[yStart - 1][x] !== -1);
 
         if (baseOk && roofOk) {
           holes++;
@@ -445,8 +445,10 @@ class TetrisGame {
     // 1. Integrar pieza al Tablero (Entidad base del sistema)
     this.current.matrix.forEach((row, dy) => {
       row.forEach((val, dx) => {
-        if (val && this.board[this.current.y + dy]) {
-           this.board[this.current.y + dy][this.current.x + dx] = this.current.typeId;
+        const ny = this.current.y + dy;
+        const nx = this.current.x + dx;
+        if (val && ny >= 0 && ny < ROWS && nx >= 0 && nx < COLS) {
+          this.board[ny][nx] = this.current.typeId;
         }
       });
     });
