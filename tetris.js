@@ -1,5 +1,4 @@
 // tetris.js - Motor Tetris con Modelo Geométrico Matricial v4.1 Integrado
-// Compatible con indextetris.html y tetriscss.css (render DOM-based)
 
 const COLS = 12;
 const ROWS = 22;
