@@ -311,9 +311,24 @@ class TetrisGame {
 
     const pre = GeometricEvaluator.countAgujerosCanonicos(this.board);
     const huecos = GeometricEvaluator.findHuecos(this.board);
+    let lowestHueco = null;
+    for (const h of huecos) {
+      const yEnd = h.top + h.h - 1;
+      if (!lowestHueco ||
+          yEnd > (lowestHueco.top + lowestHueco.h - 1) ||
+          (yEnd === (lowestHueco.top + lowestHueco.h - 1) && h.left < lowestHueco.left)) {
+        lowestHueco = h;
+      }
+    }
+    const lowestHuecoHeight = lowestHueco
+      ? ROWS - (lowestHueco.top + lowestHueco.h - 1)
+      : null;
     const huecoMask = GeometricEvaluator.buildHuecoMask(huecos);
 
     const better = (a, b) => {
+      if (a.lines === 0 && b.lines === 0 && lowestHueco) {
+        if (a.y !== b.y) return a.y > b.y; // más bajo gana
+      }
       if (!b) return true;
       if (a.lines !== b.lines) return a.lines > b.lines;
       if (a.deltaHoles !== b.deltaHoles) return a.deltaHoles < b.deltaHoles;
@@ -344,6 +359,10 @@ class TetrisGame {
 
         // 2. Simular Estado Final con limpieza de líneas
         const {board: simulatedBoard, linesCleared} = this.getSimulatedBoardWithLines(shapeMatrix, x, y);
+        if (linesCleared === 0 && lowestHuecoHeight !== null) {
+          const placementHeight = ROWS - y;
+          if (placementHeight > lowestHuecoHeight + 4) continue;
+        }
 
         // 3. Evaluación Geométrica
         const cl = GeometricEvaluator.calculateCL(shapeMatrix, x, y, this.board);
