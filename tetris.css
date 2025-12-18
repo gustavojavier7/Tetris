@@ -224,7 +224,7 @@ button:active {
 .game-board-wrapper {
         flex: 1;
         display: flex;
-        align-items: flex-end;
+        align-items: center;
         justify-content: center;
         height: 100%;
         min-height: 0;
@@ -233,8 +233,8 @@ button:active {
 .game-board {
 	flex: 0 0 auto;
 	width: calc(var(--unit) * var(--area-x));
-	height: min(calc(var(--unit) * var(--area-y)), 100%);
-	max-height: 100%;
+	height: 100%;
+	max-height: none;
 	background: var(--beige);
 	border: 2px solid #000;
 	box-shadow: inset 2px 2px var(--panel-light), inset -2px -2px var(--panel-dark);
@@ -263,6 +263,12 @@ button:active {
         z-index: 20;
         height: max-content;
         align-self: flex-start;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        text-align: center;
 }
 
 .inline-next-piece p {
@@ -277,6 +283,10 @@ button:active {
         height: 120px;
         transform: scale(0.7);
         transform-origin: top left;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
 }
 
 .game-grid {

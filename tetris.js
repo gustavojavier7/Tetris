@@ -3,13 +3,33 @@
 
 const COLS = 12;
 const ROWS = 22;
-const UNIT = 20; // Coincide con --unit en CSS
+let UNIT = 20; // Coincide con --unit en CSS y se ajusta al alto del contenedor
 
 const PIECE_TYPES = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
 const BLOCK_CLASSES = ['block0', 'block1', 'block2', 'block3', 'block4', 'block5', 'block6'];
 
 document.documentElement.style.setProperty('--area-x', COLS);
 document.documentElement.style.setProperty('--area-y', ROWS);
+
+function syncBoardScale(gameInstance = null) {
+  const wrapper = document.querySelector('.game-board-wrapper');
+  const board = document.querySelector('.game-board');
+  if (!wrapper || !board) return;
+
+  const wrapperHeight = wrapper.clientHeight;
+  if (!wrapperHeight) return;
+  const dynamicUnit = wrapperHeight / ROWS;
+
+  document.documentElement.style.setProperty('--unit', `${dynamicUnit}px`);
+  UNIT = dynamicUnit;
+  board.style.height = `${wrapperHeight}px`;
+  board.style.width = `${COLS * dynamicUnit}px`;
+
+  if (gameInstance) {
+    gameInstance.render();
+    gameInstance.renderNext();
+  }
+}
 
 const TETROMINOS = {
   I: [[[1,1,1,1]], [[1],[1],[1],[1]]],
@@ -616,4 +636,8 @@ class TetrisGame {
   }
 }
 
-window.addEventListener('load', () => new TetrisGame());
+window.addEventListener('load', () => {
+  syncBoardScale();
+  const game = new TetrisGame();
+  window.addEventListener('resize', () => syncBoardScale(game));
+});
