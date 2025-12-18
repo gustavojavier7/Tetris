@@ -175,6 +175,8 @@ class TetrisGame {
     this.nextBox = document.getElementById('tetris-nextpuzzle');
     this.indicator = document.getElementById('bot-strategy-indicator');
     this.timerDisplay = document.getElementById('tetris-stats-time');
+    this.activeBlocksDOM = [];
+    this.initActiveBlocks();
 
     this.score = 0;
     this.lines = 0;
@@ -203,6 +205,16 @@ class TetrisGame {
 
     this.bindEvents();
     this.loop();
+  }
+
+  initActiveBlocks() {
+    for (let i = 0; i < 4; i++) {
+      const div = document.createElement('div');
+      div.className = 'active-block delay-' + i;
+      div.style.display = 'none';
+      this.area.appendChild(div);
+      this.activeBlocksDOM.push(div);
+    }
   }
 
   initBag() {
@@ -276,6 +288,7 @@ class TetrisGame {
 
   render() {
     this.area.innerHTML = '';
+    this.activeBlocksDOM.forEach(block => this.area.appendChild(block));
     // Locked pieces
     for (let y = 0; y < ROWS; y++) {
       for (let x = 0; x < COLS; x++) {
@@ -285,9 +298,13 @@ class TetrisGame {
       }
     }
     // Ghost (si IA activa)
-    if (this.ghost && this.iaAssist) this.renderPiece(this.ghost, true);
+    if (this.ghost && this.iaAssist) this.renderPieceGhost(this.ghost);
     // Current piece
-    if (this.current) this.renderPiece(this.current, false);
+    if (this.current) {
+      this.updateActivePieceVisuals();
+    } else {
+      this.hideActiveBlocks();
+    }
   }
 
   createBlock(typeId, x, y, extraClass = '') {
@@ -298,14 +315,42 @@ class TetrisGame {
     this.area.appendChild(div);
   }
 
-  renderPiece(piece, isGhost = false) {
-    const extra = isGhost ? 'bot-ghost' : 'bot-controlled';
+  renderPieceGhost(piece) {
+    const extra = 'bot-ghost';
     piece.matrix.forEach((row, dy) => {
       row.forEach((val, dx) => {
         if (val) {
           this.createBlock(piece.typeId, piece.x + dx, piece.y + dy, extra);
         }
       });
+    });
+  }
+
+  updateActivePieceVisuals() {
+    let blockIndex = 0;
+    const matrix = this.current.matrix;
+
+    matrix.forEach((row, dy) => {
+      row.forEach((val, dx) => {
+        if (val && blockIndex < 4) {
+          const block = this.activeBlocksDOM[blockIndex];
+          block.className = `active-block delay-${blockIndex} ${BLOCK_CLASSES[this.current.typeId]} bot-controlled`;
+          block.style.left = `${(this.current.x + dx) * UNIT}px`;
+          block.style.top = `${(this.current.y + dy) * UNIT}px`;
+          block.style.display = 'block';
+          blockIndex++;
+        }
+      });
+    });
+
+    for (let i = blockIndex; i < this.activeBlocksDOM.length; i++) {
+      this.activeBlocksDOM[i].style.display = 'none';
+    }
+  }
+
+  hideActiveBlocks() {
+    this.activeBlocksDOM.forEach(block => {
+      block.style.display = 'none';
     });
   }
 
