@@ -282,10 +282,12 @@ button:active {
         position: relative !important;
         left: 0 !important;
         top: 0 !important;
-        width: calc(var(--unit) * var(--area-x) - 1px);
-        height: 100%;
-        max-height: 100%;
-        min-height: calc(var(--unit) * var(--area-y) - 1px);
+        width: calc(var(--unit) * var(--area-x));
+        height: calc(var(--unit) * var(--area-y));
+        min-width: calc(var(--unit) * var(--area-x));
+        min-height: calc(var(--unit) * var(--area-y));
+        max-width: calc(var(--unit) * var(--area-x));
+        max-height: calc(var(--unit) * var(--area-y));
         border: 1px solid #000;
 }
 
@@ -436,4 +438,3 @@ button:active {
 .footer {
         display: none !important;
 }
-
