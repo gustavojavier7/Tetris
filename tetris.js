@@ -336,7 +336,14 @@ class TetrisGame {
     const huecoMask = GeometricEvaluator.buildHuecoMask(huecos);
 
     const better = (a, b) => {
-      if (!b) return true;
+      if (!a) {
+        console.warn('[AGENT][botThink] Fast-Fail: candidato A nulo/indefinido.');
+        return false;
+      }
+      if (!b) {
+        console.warn('[AGENT][botThink] Fast-Fail: base nula, adoptando candidato.');
+        return true;
+      }
       if (a.lines === 0 && b.lines === 0 && lowestHueco) {
         if (a.y !== b.y) return a.y > b.y; // más bajo gana
       }
@@ -368,7 +375,12 @@ class TetrisGame {
         if (this.collides(shapeMatrix, x, y)) continue;
 
         // 2. Simular Estado Final con limpieza de líneas
-        const {board: simulatedBoard, linesCleared} = this.getSimulatedBoardWithLines(shapeMatrix, x, y);
+        const simulation = this.getSimulatedBoardWithLines(shapeMatrix, x, y);
+        if (!simulation) {
+          console.warn('[AGENT][botThink] Fast-Fail: simulación inválida, candidato descartado.');
+          continue;
+        }
+        const {board: simulatedBoard, linesCleared} = simulation;
         // Filtro de crecimiento relativo (NO suicida)
         if (linesCleared === 0) {
           const placementHeight = ROWS - y;
@@ -416,18 +428,32 @@ class TetrisGame {
 
   // Helper necesario para que el evaluador vea el futuro con líneas limpiadas
   getSimulatedBoardWithLines(matrix, px, py) {
+    if (!matrix || !Array.isArray(matrix) || !Array.isArray(this.board)) {
+      console.warn('[AGENT][botThink] Fast-Fail: datos inválidos para simular tablero.');
+      return null;
+    }
+
     const clone = this.board.map(row => [...row]);
-    matrix.forEach((row, dy) => {
-      row.forEach((val, dx) => {
-        if (val) {
-          const ny = py + dy;
-          const nx = px + dx;
-          if (ny >= 0 && ny < ROWS && nx >= 0 && nx < COLS) {
-            clone[ny][nx] = this.current.typeId;
-          }
+    let invalidProjection = false;
+
+    for (let dy = 0; dy < matrix.length; dy++) {
+      for (let dx = 0; dx < matrix[dy].length; dx++) {
+        if (!matrix[dy][dx]) continue;
+        const ny = py + dy;
+        const nx = px + dx;
+        if (ny < 0 || ny >= ROWS || nx < 0 || nx >= COLS) {
+          invalidProjection = true;
+          break;
         }
-      });
-    });
+        clone[ny][nx] = this.current.typeId;
+      }
+      if (invalidProjection) break;
+    }
+
+    if (invalidProjection) {
+      console.warn('[AGENT][botThink] Fast-Fail: proyección fuera de los límites del tablero.');
+      return null;
+    }
 
     let filtered = clone.filter(row => row.some(cell => cell === -1));
     const linesCleared = ROWS - filtered.length;
