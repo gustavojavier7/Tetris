@@ -7,7 +7,6 @@
     <title>Tetris Moderno</title>
     <link href="tetris.css" rel="stylesheet" type="text/css">
     <link href="tetris.ico" rel="shortcut icon">
-    <script type="text/javascript" src="tetris_model.js"></script>
     <script type="text/javascript" src="tetris.js"></script>
 </head>
 
@@ -79,19 +78,19 @@
                 <button class="btn-secondary" id="audioBtn">🔊 Sound On</button>
             </div>
             <div class="game-section">
-                <div class="game-board">
-                    <div class="inline-next-piece win95-block">
-                        <p>Next Piece</p>
-                        <div class="next-piece-box" id="tetris-nextpuzzle"></div>
+                <div class="game-board-wrapper">
+                    <div class="game-board">
+                        <div class="game-grid" id="gameGrid"></div>
+                        <div id="tetris-area"></div>
+                        <div class="game-message idle" id="gameMessage">
+                            <h2>PRESS START</h2>
+                            <p>Ready to play?</p>
+                        </div>
                     </div>
-                    <div class="game-grid" id="gameGrid"></div>
-
-                    <div id="tetris-area"></div>
-
-                    <div class="game-message idle" id="gameMessage">
-                        <h2>PRESS START</h2>
-                        <p>Ready to play?</p>
-                    </div>
+                </div>
+                <div class="inline-next-piece win95-block">
+                    <p>Next Piece</p>
+                    <div class="next-piece-box" id="tetris-nextpuzzle"></div>
                 </div>
             </div>
         </div>

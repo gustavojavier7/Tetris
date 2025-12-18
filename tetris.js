@@ -8,6 +8,9 @@ const UNIT = 20; // Coincide con --unit en CSS
 const PIECE_TYPES = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
 const BLOCK_CLASSES = ['block0', 'block1', 'block2', 'block3', 'block4', 'block5', 'block6'];
 
+document.documentElement.style.setProperty('--area-x', COLS);
+document.documentElement.style.setProperty('--area-y', ROWS);
+
 const TETROMINOS = {
   I: [[[1,1,1,1]], [[1],[1],[1],[1]]],
   O: [[[1,1],[1,1]]],
@@ -333,10 +336,10 @@ class TetrisGame {
     const huecoMask = GeometricEvaluator.buildHuecoMask(huecos);
 
     const better = (a, b) => {
+      if (!b) return true;
       if (a.lines === 0 && b.lines === 0 && lowestHueco) {
         if (a.y !== b.y) return a.y > b.y; // más bajo gana
       }
-      if (!b) return true;
       if (a.lines !== b.lines) return a.lines > b.lines;
       if (a.deltaHoles !== b.deltaHoles) return a.deltaHoles < b.deltaHoles;
       if (a.holesReduced !== b.holesReduced) return a.holesReduced > b.holesReduced;
