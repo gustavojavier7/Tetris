@@ -106,6 +106,7 @@ class TetrisGame {
     this.iaAssist = false;
     this.paused = true;
     this.gameOver = false;
+    this.lastTime = 0;
 
     this.bag = [];
     this.current = null;
@@ -246,17 +247,69 @@ class TetrisGame {
   }
 
   botThink() {
-    // Placeholder para evaluación completa (se expandirá en iteraciones futuras)
-    // Por ahora, ghost = hard drop directo
     if (!this.current) return;
-    const dropY = this.getDropY();
-    this.ghost = {
-      typeId: this.current.typeId,
-      matrix: this.current.matrix,
-      x: this.current.x,
-      y: dropY
-    };
+    this.ghost = null;
+    
+    let bestScore = -Infinity;
+    // Iteramos por las rotaciones predefinidas en TETROMINOS
+    this.current.shapes.forEach((shapeMatrix, rotationIdx) => {
+      const width = shapeMatrix[0].length;
+      
+      // Barrido lateral
+      for (let x = -1; x <= COLS - width + 1; x++) {
+        // 1. Simular gravedad (Drop Y)
+        let y = this.current.y;
+        while (!this.collides(shapeMatrix, x, y + 1)) {
+          y++;
+        }
+        
+        // Si la pieza choca al nacer, posición inválida
+        if (this.collides(shapeMatrix, x, y)) continue;
+
+        // 2. Simular Estado Final (Punto 10 Mapa Mental)
+        const simulatedBoard = this.getSimulatedBoard(shapeMatrix, x, y);
+        
+        // 3. Evaluación Geométrica (Puntos 8.3 y 6)
+        // Beneficio: Estabilidad (CL) y Profundidad (y)
+        const cl = GeometricEvaluator.calculateCL(shapeMatrix, x, y, this.board);
+        // Costo: Deuda Estructural (Agujeros)
+        const holes = GeometricEvaluator.calculateAgujeros(simulatedBoard);
+        
+        // Función de Energía (Pesos ajustables)
+        // Valoramos mucho el CL (Estabilidad) y penalizamos fuerte los Agujeros
+        const score = (cl * 2.5) + (y * 1.0) - (holes * 20.0);
+
+        if (score > bestScore) {
+          bestScore = score;
+          this.ghost = {
+            typeId: this.current.typeId,
+            matrix: shapeMatrix, // Guardamos la matriz rotada correcta
+            rotation: rotationIdx,
+            x: x,
+            y: y
+          };
+        }
+      }
+    });
+    
     this.render();
+  }
+
+  // Helper necesario para que el evaluador vea el futuro
+  getSimulatedBoard(matrix, px, py) {
+    const clone = this.board.map(row => [...row]);
+    matrix.forEach((row, dy) => {
+      row.forEach((val, dx) => {
+        if (val) {
+          const ny = py + dy;
+          const nx = px + dx;
+          if (ny >= 0 && ny < ROWS && nx >= 0 && nx < COLS) {
+            clone[ny][nx] = this.current.typeId;
+          }
+        }
+      });
+    });
+    return clone;
   }
 
   getDropY() {
@@ -265,6 +318,53 @@ class TetrisGame {
       y++;
     }
     return y;
+  }
+
+  executeBotMove() {
+    if (!this.ghost) return;
+    
+    // 1. Aplicar la transformación geométrica elegida
+    this.current.matrix = this.ghost.matrix; // Aplicar rotación
+    this.current.rotation = this.ghost.rotation;
+    this.current.x = this.ghost.x;
+    this.current.y = this.ghost.y;
+
+    // 2. Materializar el encastre (Punto 8.5)
+    this.lockPiece();
+    
+    // Feedback visual opcional (resaltar el encastre)
+    this.render();
+  }
+
+  applyGravity() {
+    if (!this.collides(this.current.matrix, this.current.x, this.current.y + 1)) {
+      this.current.y++;
+      this.render();
+    } else {
+      this.lockPiece();
+    }
+  }
+
+  lockPiece() {
+    // 1. Integrar pieza al Tablero (Entidad base del sistema)
+    this.current.matrix.forEach((row, dy) => {
+      row.forEach((val, dx) => {
+        if (val && this.board[this.current.y + dy]) {
+           this.board[this.current.y + dy][this.current.x + dx] = this.current.typeId;
+        }
+      });
+    });
+
+    // 2. Limpieza de líneas (Reducción de entropía)
+    this.board = this.board.filter(row => row.some(cell => cell === -1));
+    const linesCleared = ROWS - this.board.length;
+    this.score += linesCleared * 100; // Puntuación simple
+    while (this.board.length < ROWS) {
+        this.board.unshift(Array(COLS).fill(-1));
+    }
+
+    // 3. Generar nueva oportunidad
+    this.spawnNewPiece();
   }
 
   togglePause() {
@@ -279,15 +379,27 @@ class TetrisGame {
     this.spawnNewPiece();
     this.gameOver = false;
     this.paused = true;
+    this.lastTime = 0;
     this.render();
     this.renderNext();
   }
 
-  loop() {
+  loop(time = 0) {
     if (!this.paused && !this.gameOver) {
-      // Lógica de caída automática y bot se añadirá aquí
+      // Velocidad reactiva: El bot juega rápido (50ms), el humano según nivel
+      const dropInterval = this.iaAssist ? 50 : 1000 - (this.level * 50);
+      const deltaTime = time - (this.lastTime || 0);
+
+      if (deltaTime > dropInterval) {
+        if (this.iaAssist) {
+          this.executeBotMove(); // Ejecución inmediata del plan geométrico
+        } else {
+          this.applyGravity();   // Caída física normal
+        }
+        this.lastTime = time;
+      }
     }
-    requestAnimationFrame(() => this.loop());
+    requestAnimationFrame((t) => this.loop(t));
   }
 }
 
