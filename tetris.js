@@ -180,6 +180,7 @@ class TetrisGame {
     this.botWorker = new Worker('bot.worker.js');
     this.botWorker.onmessage = (e) => this.handleWorkerMessage(e);
     this.botRequestId = 0;
+    this.botPlan = null;
     this.pendingBotRequestId = null;
     this.isBotThinking = false;
 
@@ -202,7 +203,6 @@ class TetrisGame {
     this.areTimer = 0;
     this.softDropTimer = 0;
     this.fallAccumulator = 0;
-    this.botAccumulator = 0;
 
     this.bag = [];
     this.current = null;
@@ -259,7 +259,7 @@ class TetrisGame {
     this.next = this.getNextPieceType();
     this.dasTimer = 0;
     this.fallAccumulator = 0;
-    this.botAccumulator = 0;
+    this.botPlan = null;
 
     this.current.x = Math.floor(COLS / 2) - Math.floor(this.current.shapes[0][0].length / 2);
     this.current.y = 0;
@@ -274,7 +274,10 @@ class TetrisGame {
 
     if (this.gameOver) return;
 
-    if (this.keys.left) {
+    if (this.iaAssist) {
+      this.releaseHorizontalKeys();
+      this.keys.down = false;
+    } else if (this.keys.left) {
       this.move(-1);
     } else if (this.keys.right) {
       this.move(1);
@@ -311,10 +314,10 @@ class TetrisGame {
       this.pendingBotRequestId = null;
       this.isBotThinking = false;
       this.ghost = null;
+      this.botPlan = null;
       if (this.iaAssist) {
         this.requestBotMove();
       }
-      this.botAccumulator = 0;
       this.fallAccumulator = 0;
       this.dasTimer = 0;
       this.keys = { left: false, right: false, down: false };
@@ -534,8 +537,10 @@ class TetrisGame {
 
     if (this.iaAssist) {
       this.ghost = ghost;
+      this.prepareBotPlanFromGhost();
     } else {
       this.ghost = null;
+      this.botPlan = null;
     }
 
     this.updateIndicator();
@@ -673,6 +678,138 @@ class TetrisGame {
     this.render();
   }
 
+  prepareBotPlanFromGhost() {
+    if (!this.iaAssist || !this.current || !this.ghost) {
+      this.botPlan = null;
+      return;
+    }
+
+    if (this.current.typeId !== this.ghost.typeId) {
+      console.warn('[AGENT][botPlan] Fast-Fail: el ghost no coincide con la pieza activa.');
+      this.botPlan = null;
+      return;
+    }
+
+    const rotationsNeeded = (this.ghost.rotation - this.current.rotation + this.current.shapes.length) % this.current.shapes.length;
+
+    this.botPlan = {
+      pieceId: this.current.typeId,
+      targetX: this.ghost.x,
+      targetRotation: this.ghost.rotation,
+      rotationsRemaining: rotationsNeeded,
+      holdDirection: null,
+      dropQueued: false
+    };
+
+    this.releaseHorizontalKeys();
+  }
+
+  releaseHorizontalKeys() {
+    this.keys.left = false;
+    this.keys.right = false;
+    this.dasTimer = 0;
+  }
+
+  applyBotHorizontalHold(dir) {
+    const pieceReady = this.current && this.areTimer === 0;
+    if (dir < 0) {
+      if (!this.keys.left) {
+        this.keys.left = true;
+        this.keys.right = false;
+        if (pieceReady) this.move(-1);
+        this.dasTimer = 0;
+      }
+    } else if (dir > 0) {
+      if (!this.keys.right) {
+        this.keys.right = true;
+        this.keys.left = false;
+        if (pieceReady) this.move(1);
+        this.dasTimer = 0;
+      }
+    }
+    this.botPlan.holdDirection = dir;
+  }
+
+  applyBotControl() {
+    if (!this.iaAssist || !this.current || this.areTimer > 0) return;
+
+    if (!this.ghost) {
+      this.botPlan = null;
+      return;
+    }
+
+    if (!this.botPlan ||
+        this.botPlan.pieceId !== this.current.typeId ||
+        this.botPlan.targetX !== this.ghost.x ||
+        this.botPlan.targetRotation !== this.ghost.rotation) {
+      this.prepareBotPlanFromGhost();
+    }
+
+    if (!this.botPlan) return;
+
+    if (this.botPlan.rotationsRemaining > 0) {
+      const prevRotation = this.current.rotation;
+      this.rotate();
+      if (this.current && this.current.rotation !== prevRotation) {
+        this.botPlan.rotationsRemaining -= 1;
+      } else {
+        console.warn('[AGENT][botPlan] Fast-Fail: rotación rechazada, abortando plan actual.');
+        this.botPlan = null;
+        this.releaseHorizontalKeys();
+      }
+      return;
+    }
+
+    const deltaX = this.botPlan.targetX - this.current.x;
+    if (deltaX !== 0) {
+      const dir = deltaX < 0 ? -1 : 1;
+      if (this.botPlan.holdDirection !== dir) {
+        this.applyBotHorizontalHold(dir);
+      }
+      return;
+    }
+
+    if (this.botPlan.holdDirection !== null) {
+      this.releaseHorizontalKeys();
+      this.botPlan.holdDirection = null;
+    }
+
+    if (!this.botPlan.dropQueued) {
+      this.botPlan.dropQueued = true;
+      this.hardDrop();
+    }
+  }
+
+  handleHorizontalInput(deltaTime) {
+    if (!this.current || this.areTimer > 0) return;
+
+    if (this.keys.left || this.keys.right) {
+      this.dasTimer += deltaTime;
+      if (this.dasTimer >= this.DAS_DELAY) {
+        while (this.dasTimer >= this.DAS_DELAY + this.ARR_DELAY) {
+          this.move(this.keys.left ? -1 : 1);
+          this.dasTimer -= this.ARR_DELAY;
+          if (!this.current || this.areTimer > 0) break;
+        }
+      }
+    } else {
+      this.dasTimer = 0;
+    }
+  }
+
+  handleGravity(deltaTime) {
+    if (!this.current || this.areTimer > 0) return;
+
+    const gravitySpeed = Math.max(50, 1000 - (this.level * 50));
+    const currentSpeed = this.keys.down ? Math.min(50, gravitySpeed / 10) : gravitySpeed;
+    this.fallAccumulator += deltaTime;
+    while (this.fallAccumulator >= currentSpeed) {
+      this.applyGravity();
+      this.fallAccumulator -= currentSpeed;
+      if (!this.current || this.areTimer > 0) break;
+    }
+  }
+
   move(dir) {
     if (!this.current || this.areTimer > 0) return;
     if (!this.collides(this.current.matrix, this.current.x + dir, this.current.y)) {
@@ -766,19 +903,7 @@ class TetrisGame {
   }
 
   executeBotMove() {
-    if (!this.iaAssist || !this.ghost || !this.current || this.areTimer > 0) return;
-    
-    // 1. Aplicar la transformación geométrica elegida
-    this.current.matrix = this.ghost.matrix; // Aplicar rotación
-    this.current.rotation = this.ghost.rotation;
-    this.current.x = this.ghost.x;
-    this.current.y = this.ghost.y;
-
-    // 2. Materializar el encastre (Punto 8.5)
-    this.lockPiece();
-    
-    // Feedback visual opcional (resaltar el encastre)
-    this.render();
+    console.warn('[AGENT][executeBotMove] Fast-Fail: ruta obsoleta. El bot ahora simula presión de teclas humanas.');
   }
 
   applyGravity() {
@@ -815,12 +940,12 @@ class TetrisGame {
         this.board.unshift(Array(COLS).fill(-1));
     }
     this.ghost = null;
+    this.botPlan = null;
 
     // 3. Generar nueva oportunidad
     this.current = null;
     this.areTimer = this.ARE_DELAY;
     this.fallAccumulator = 0;
-    this.botAccumulator = 0;
     this.render();
   }
 
@@ -847,7 +972,7 @@ class TetrisGame {
     this.areTimer = 0;
     this.dasTimer = 0;
     this.fallAccumulator = 0;
-    this.botAccumulator = 0;
+    this.botPlan = null;
     this.keys = { left: false, right: false, down: false };
     this.elapsedMs = 0;
     this.isBotThinking = false;
@@ -874,38 +999,12 @@ class TetrisGame {
           this.spawnNewPiece();
         }
 
-        if (this.iaAssist) {
-          const gravitySpeed = Math.max(50, 1000 - (this.level * 50));
-          this.botAccumulator += deltaTime;
-          while (this.botAccumulator >= gravitySpeed) {
-            this.botAccumulator -= gravitySpeed;
-            if (!this.isBotThinking && this.ghost) {
-              this.executeBotMove();
-            }
-            if (this.areTimer > 0 || !this.current) break;
+        if (this.current) {
+          if (this.iaAssist) {
+            this.applyBotControl();
           }
-        } else if (this.current) {
-          if (this.keys.left || this.keys.right) {
-            this.dasTimer += deltaTime;
-            if (this.dasTimer >= this.DAS_DELAY) {
-              while (this.dasTimer >= this.DAS_DELAY + this.ARR_DELAY) {
-                this.move(this.keys.left ? -1 : 1);
-                this.dasTimer -= this.ARR_DELAY;
-                if (!this.current || this.areTimer > 0) break;
-              }
-            }
-          } else {
-            this.dasTimer = 0;
-          }
-
-          const gravitySpeed = Math.max(50, 1000 - (this.level * 50));
-          const currentSpeed = this.keys.down ? Math.min(50, gravitySpeed / 10) : gravitySpeed;
-          this.fallAccumulator += deltaTime;
-          while (this.fallAccumulator >= currentSpeed) {
-            this.applyGravity();
-            this.fallAccumulator -= currentSpeed;
-            if (!this.current || this.areTimer > 0) break;
-          }
+          this.handleHorizontalInput(deltaTime);
+          this.handleGravity(deltaTime);
         }
       }
     }
