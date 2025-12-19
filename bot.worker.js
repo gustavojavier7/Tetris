@@ -278,62 +278,55 @@ function computeStateMetrics(topology) {
 
 function planBestSequence(board, bagTypeIds) {
   // CONFIGURACIÓN DE RENDIMIENTO
-  const BEAM_WIDTH = 15; // Número de "futuros" a mantener vivos. (Bajar a 5-10 si hay lag)
+  const BEAM_WIDTH = 15; // Ajustar según rendimiento (5-50)
 
   if (!BoardAnalyzer.validate(board)) {
     return { deltaAopen: 0, finalRugosidad: 0, path: [] };
   }
 
-  const bitboard0 = toBitBoard(board);
-
-  // 1. Preparar secuencia y métricas iniciales
+  // 1. Preparar secuencia
   const sequence = Array.isArray(bagTypeIds)
     ? bagTypeIds.filter((id) => id !== null && id !== undefined)
     : [];
 
   if (sequence.length === 0) return { path: [] };
 
-  const topology0 = analyzeTopology(bitboard0);
+  const topology0 = analyzeTopology(board);
   const metrics0 = computeStateMetrics(topology0);
   const A0 = metrics0?.A_open ?? 0;
 
-  // 2. Estado inicial del haz (Beam)
-  // Cada candidato guarda su tablero actual y la ruta de movimientos que llevó ahí
+  // 2. Estado inicial del haz
   let candidates = [{
-    board: bitboard0,
+    board: board,
     path: [],
     A_open: A0,
-    rugosidad: metrics0?.geometric?.rugosidad ?? 0
+    rugosidad: metrics0?.geometric?.rugosidad ?? 0,
+    A_closed: metrics0?.A_closed_total ?? 0
   }];
 
-  // 3. Iterar sobre cada pieza de la secuencia (Profundidad)
+  // 3. Iterar sobre la secuencia (Beam Search)
   for (let i = 0; i < sequence.length; i++) {
     const currentTypeId = sequence[i];
     const nextCandidates = [];
-    const visitedHashes = new Set(); // Para no procesar el mismo tablero dos veces en el mismo turno
+    const visitedHashes = new Set();
 
-    // Expandir cada candidato sobreviviente
     for (const candidate of candidates) {
       const placements = generatePlacements(candidate.board, currentTypeId);
 
       for (const placement of placements) {
-        // Simular física
         const nextBoard = simulatePlacementAndClearLines(candidate.board, placement);
         if (!nextBoard) continue;
 
-        // Deduplicación (Optimización crítica)
-        const h = hashBitBoard(nextBoard);
+        const h = hashBoard(nextBoard);
         if (visitedHashes.has(h)) continue;
         visitedHashes.add(h);
 
-        // Evaluar Topología
         const topology = analyzeTopology(nextBoard);
         const metrics = computeStateMetrics(topology);
         
-        // Guardar nuevo candidato
         nextCandidates.push({
           board: nextBoard,
-          path: [...candidate.path, placement], // Historial de movimientos
+          path: [...candidate.path, placement],
           A_open: metrics.A_open,
           rugosidad: metrics.geometric.rugosidad,
           A_closed: metrics.A_closed_total
@@ -341,32 +334,28 @@ function planBestSequence(board, bagTypeIds) {
       }
     }
 
-    if (nextCandidates.length === 0) break; // Camino sin salida
+    if (nextCandidates.length === 0) break;
 
-    // 4. PODA (SELECCIÓN NATURAL)
-    // Ordenamos los candidatos:
-    // 1. Más área abierta (Libertad)
-    // 2. Menos área cerrada (Seguridad)
-    // 3. Menos rugosidad (Estabilidad)
+    // 4. PODA CON NUEVAS PRIORIDADES (SOLICITUD USUARIO)
     nextCandidates.sort((a, b) => {
-      if (a.A_open !== b.A_open) return b.A_open - a.A_open;        // Mayor es mejor
-      if (a.A_closed !== b.A_closed) return a.A_closed - b.A_closed; // Menor es mejor
-      return a.rugosidad - b.rugosidad;                             // Menor es mejor
+      // Prioridad 1: Menos Rugosidad (Estabilidad / Superficie Plana)
+      if (a.rugosidad !== b.rugosidad) return a.rugosidad - b.rugosidad;
+      
+      // Prioridad 2: Más Área Abierta (Libertad de movimiento)
+      if (a.A_open !== b.A_open) return b.A_open - a.A_open;
+      
+      // Prioridad 3: Menos Área Cerrada (Seguridad / Huecos)
+      return a.A_closed - b.A_closed;
     });
 
-    // Sobreviven solo los mejores (BEAM_WIDTH)
-    const survivors = nextCandidates.slice(0, BEAM_WIDTH);
-    visitedHashes.clear();
-    nextCandidates.length = 0;
-    candidates = survivors;
+    candidates = nextCandidates.slice(0, BEAM_WIDTH);
   }
 
-  // 5. Retornar el mejor resultado final
   const best = candidates[0];
   if (!best) return { path: [] };
 
   return {
-    path: best.path, // Esto es lo que think() espera
+    path: best.path,
     deltaAopen: best.A_open - A0
   };
 }
