@@ -220,94 +220,93 @@ function hashBoard(board) {
 }
 
 function planBestSequence(board, bagTypeIds) {
+  // CONFIGURACIÓN DE RENDIMIENTO
+  const BEAM_WIDTH = 15; // Número de "futuros" a mantener vivos. (Bajar a 5-10 si hay lag)
+
   if (!BoardAnalyzer.validate(board)) {
-    console.warn('[AGENT][planner] Fast-Fail: tablero inválido para planificar.');
     return { deltaAopen: 0, finalRugosidad: 0, path: [] };
   }
 
+  // 1. Preparar secuencia y métricas iniciales
   const sequence = Array.isArray(bagTypeIds)
     ? bagTypeIds.filter((id) => id !== null && id !== undefined)
     : [];
+
+  if (sequence.length === 0) return { path: [] };
 
   const topology0 = analyzeTopology(board);
   const metrics0 = computeStateMetrics(topology0);
   const A0 = metrics0?.A_open ?? 0;
 
-  if (sequence.length === 0) {
-    return {
-      deltaAopen: 0,
-      finalRugosidad: metrics0?.geometric?.rugosidad ?? 0,
-      path: []
-    };
-  }
+  // 2. Estado inicial del haz (Beam)
+  // Cada candidato guarda su tablero actual y la ruta de movimientos que llevó ahí
+  let candidates = [{
+    board: board,
+    path: [],
+    A_open: A0,
+    rugosidad: metrics0?.geometric?.rugosidad ?? 0
+  }];
 
-  const memo = new Map();
+  // 3. Iterar sobre cada pieza de la secuencia (Profundidad)
+  for (let i = 0; i < sequence.length; i++) {
+    const currentTypeId = sequence[i];
+    const nextCandidates = [];
+    const visitedHashes = new Set(); // Para no procesar el mismo tablero dos veces en el mismo turno
 
-  function isBetter(candidate, current) {
-    if (!current) return true;
-    if (candidate.deltaAopen > current.deltaAopen) return true;
-    if (candidate.deltaAopen < current.deltaAopen) return false;
+    // Expandir cada candidato sobreviviente
+    for (const candidate of candidates) {
+      const placements = generatePlacements(candidate.board, currentTypeId);
 
-    if (candidate.deltaAopen <= 0 && current.deltaAopen <= 0) {
-      if (candidate.finalRugosidad < current.finalRugosidad) return true;
-      if (candidate.finalRugosidad > current.finalRugosidad) return false;
-    }
+      for (const placement of placements) {
+        // Simular física
+        const nextBoard = simulatePlacementAndClearLines(candidate.board, placement);
+        if (!nextBoard) continue;
 
-    return false;
-  }
+        // Deduplicación (Optimización crítica)
+        const h = hashBoard(nextBoard);
+        if (visitedHashes.has(h)) continue;
+        visitedHashes.add(h);
 
-  function dfs(currentBoard, index) {
-    const key = `${index}|${hashBoard(currentBoard)}`;
-    if (memo.has(key)) return memo.get(key);
-
-    if (index >= sequence.length) {
-      const topology = analyzeTopology(currentBoard);
-      const metrics = computeStateMetrics(topology);
-      const Af = metrics?.A_open ?? 0;
-      const finalRugosidad = metrics?.geometric?.rugosidad ?? 0;
-      const result = { deltaAopen: Af - A0, finalRugosidad, path: [] };
-      memo.set(key, result);
-      return result;
-    }
-
-    const placements = generatePlacements(currentBoard, sequence[index]);
-    let bestResult = null;
-
-    for (const placement of placements) {
-      const nextBoard = simulatePlacementAndClearLines(currentBoard, placement);
-      if (!nextBoard) continue;
-
-      const child = dfs(nextBoard, index + 1);
-      if (!child) continue;
-
-      const candidate = {
-        deltaAopen: child.deltaAopen,
-        finalRugosidad: child.finalRugosidad,
-        path: [placement, ...child.path]
-      };
-
-      if (isBetter(candidate, bestResult)) {
-        bestResult = candidate;
+        // Evaluar Topología
+        const topology = analyzeTopology(nextBoard);
+        const metrics = computeStateMetrics(topology);
+        
+        // Guardar nuevo candidato
+        nextCandidates.push({
+          board: nextBoard,
+          path: [...candidate.path, placement], // Historial de movimientos
+          A_open: metrics.A_open,
+          rugosidad: metrics.geometric.rugosidad,
+          A_closed: metrics.A_closed_total
+        });
       }
     }
 
-    if (!bestResult) {
-      const topology = analyzeTopology(currentBoard);
-      const metrics = computeStateMetrics(topology);
-      const Af = metrics?.A_open ?? 0;
-      const finalRugosidad = metrics?.geometric?.rugosidad ?? 0;
-      bestResult = {
-        deltaAopen: Af - A0,
-        finalRugosidad,
-        path: []
-      };
-    }
+    if (nextCandidates.length === 0) break; // Camino sin salida
 
-    memo.set(key, bestResult);
-    return bestResult;
+    // 4. PODA (SELECCIÓN NATURAL)
+    // Ordenamos los candidatos:
+    // 1. Menos área cerrada (Seguridad)
+    // 2. Más área abierta (Libertad)
+    // 3. Menos rugosidad (Estabilidad)
+    nextCandidates.sort((a, b) => {
+      if (a.A_closed !== b.A_closed) return a.A_closed - b.A_closed; // Menor es mejor
+      if (a.A_open !== b.A_open) return b.A_open - a.A_open;       // Mayor es mejor
+      return a.rugosidad - b.rugosidad;                            // Menor es mejor
+    });
+
+    // Sobreviven solo los mejores (BEAM_WIDTH)
+    candidates = nextCandidates.slice(0, BEAM_WIDTH);
   }
 
-  return dfs(board, 0);
+  // 5. Retornar el mejor resultado final
+  const best = candidates[0];
+  if (!best) return { path: [] };
+
+  return {
+    path: best.path, // Esto es lo que think() espera
+    deltaAopen: best.A_open - A0
+  };
 }
 
 // --- Capa física pura: alcanzabilidad y consolidación ---
