@@ -183,6 +183,7 @@ class TetrisGame {
     this.botPlan = null;
     this.pendingBotRequestId = null;
     this.isBotThinking = false;
+    this.botActionTimer = 0;
 
     this.score = 0;
     this.lines = 0;
@@ -730,45 +731,62 @@ class TetrisGame {
     this.botPlan.holdDirection = dir;
   }
 
-  applyBotControl() {
+  applyBotControl(deltaTime = 0) {
+    // 1. Validaciones básicas de seguridad
     if (!this.iaAssist || !this.current || this.areTimer > 0) return;
-
     if (!this.ghost) {
       this.botPlan = null;
       return;
     }
 
+    // 2. Recalcular plan si la situación cambió (ej. pieza nueva o movimiento manual)
     if (!this.botPlan ||
         this.botPlan.pieceId !== this.current.typeId ||
         this.botPlan.targetX !== this.ghost.x ||
         this.botPlan.targetRotation !== this.ghost.rotation) {
       this.prepareBotPlanFromGhost();
+      this.botActionTimer = 0; // Resetear timer al tener nuevo plan
     }
 
     if (!this.botPlan) return;
 
+    // 3. SECCIÓN DE ROTACIÓN CON RETARDO (66 ms / 15 Hz)
     if (this.botPlan.rotationsRemaining > 0) {
-      const prevRotation = this.current.rotation;
-      this.rotate();
-      if (this.current && this.current.rotation !== prevRotation) {
-        this.botPlan.rotationsRemaining -= 1;
-      } else {
-        console.warn('[AGENT][botPlan] Fast-Fail: rotación rechazada, abortando plan actual.');
-        this.botPlan = null;
-        this.releaseHorizontalKeys();
+      this.botActionTimer += deltaTime; // Acumular milisegundos del frame
+
+      // Umbral ajustado a 66ms (aprox 15 pulsaciones por segundo)
+      if (this.botActionTimer >= 66) {
+        const prevRotation = this.current.rotation;
+        this.rotate();
+
+        if (this.current && this.current.rotation !== prevRotation) {
+          // Éxito: descontar una rotación pendiente
+          this.botPlan.rotationsRemaining -= 1;
+          this.botActionTimer = 0; // Reiniciar cuenta para la siguiente pulsación
+        } else {
+          // Fallo (muro/piso): Abortar para evitar bucle infinito
+          console.warn('[AGENT] Rotación bloqueada, abortando plan.');
+          this.botPlan = null;
+          this.releaseHorizontalKeys();
+        }
       }
+      // IMPORTANTE: Retornamos aquí para que el bot no se mueva
+      // horizontalmente mientras está ocupado rotando.
       return;
     }
 
+    // 4. Movimiento Horizontal (Sin retardo artificial, usa DAS/ARR del juego)
     const deltaX = this.botPlan.targetX - this.current.x;
     if (deltaX !== 0) {
       const dir = deltaX < 0 ? -1 : 1;
+      // Solo presionamos si no estamos ya yendo en esa dirección
       if (this.botPlan.holdDirection !== dir) {
         this.applyBotHorizontalHold(dir);
       }
       return;
     }
 
+    // 5. Finalizar: Soltar teclas y Hard Drop
     if (this.botPlan.holdDirection !== null) {
       this.releaseHorizontalKeys();
       this.botPlan.holdDirection = null;
@@ -978,6 +996,7 @@ class TetrisGame {
     this.isBotThinking = false;
     this.pendingBotRequestId = null;
     this.ghost = null;
+    this.botActionTimer = 0;
     this.stopTimer();
     this.updateTimerDisplay();
     document.getElementById('tetris-stats-score').textContent = this.score;
@@ -1001,7 +1020,7 @@ class TetrisGame {
 
         if (this.current) {
           if (this.iaAssist) {
-            this.applyBotControl();
+            this.applyBotControl(deltaTime);
           }
           this.handleHorizontalInput(deltaTime);
           this.handleGravity(deltaTime);
