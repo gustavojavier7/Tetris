@@ -3,6 +3,7 @@
 const COLS = 12;
 const ROWS = 22;
 const EMPTY = -1;
+const FULL_MASK = (1 << COLS) - 1;
 const PIECE_TYPES = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
 const TETROMINOS = {
   I: [[[1,1,1,1]], [[1],[1],[1],[1]]],
@@ -13,6 +14,8 @@ const TETROMINOS = {
   J: [[[1,0,0],[1,1,1]], [[1,1],[1,0],[1,0]], [[1,1,1],[0,0,1]], [[0,1],[0,1],[1,1]]],
   L: [[[0,0,1],[1,1,1]], [[1,0],[1,0],[1,1]], [[1,1,1],[1,0,0]], [[1,1],[0,1],[0,1]]]
 };
+
+const PIECE_MASKS = buildPieceMasks(TETROMINOS);
 
 class BoardAnalyzer {
   static validate(board) {
@@ -63,58 +66,90 @@ function think(board, currentTypeId, nextTypeId, bagTypeIds) {
 // --- API mínima para evaluación topológica ---
 
 function analyzeTopology(board) {
-  const visited = Array.from({ length: ROWS }, () =>
-    Array(COLS).fill(false)
-  );
+  const visited = new Uint8Array(ROWS * COLS);
+  const stackX = new Int16Array(ROWS * COLS);
+  const stackY = new Int16Array(ROWS * COLS);
 
-  const openCells = [];
+  const bottomProfile = new Int16Array(COLS);
+  bottomProfile.fill(-1);
+
   let openArea = 0;
   let openMinY = ROWS;
-
-  const dirs = [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1]
-  ];
+  let stackSize = 0;
 
   // --- 1. Flood fill desde el techo: RV abierta ---
-  const stack = [];
-
   for (let x = 0; x < COLS; x++) {
-    if (board[0][x] === EMPTY && !visited[0][x]) {
-      visited[0][x] = true;
-      stack.push({ x, y: 0 });
+    if ((board[0] & (1 << x)) === 0 && !visited[x]) {
+      visited[x] = 1;
+      stackX[stackSize] = x;
+      stackY[stackSize] = 0;
+      stackSize++;
     }
   }
 
-  while (stack.length) {
-    const { x, y } = stack.pop();
+  while (stackSize) {
+    stackSize--;
+    const x = stackX[stackSize];
+    const y = stackY[stackSize];
 
-    openCells.push({ x, y });
     openArea++;
     if (y < openMinY) openMinY = y;
+    if (y > bottomProfile[x]) bottomProfile[x] = y;
 
-    for (const [dx, dy] of dirs) {
-      const nx = x + dx;
-      const ny = y + dy;
-
-      if (
-        nx >= 0 && nx < COLS &&
-        ny >= 0 && ny < ROWS &&
-        board[ny][nx] === EMPTY &&
-        !visited[ny][nx]
-      ) {
-        visited[ny][nx] = true;
-        stack.push({ x: nx, y: ny });
+    // Derecha
+    if (x + 1 < COLS) {
+      const nx = x + 1;
+      const ny = y;
+      const idx = ny * COLS + nx;
+      if ((board[ny] & (1 << nx)) === 0 && !visited[idx]) {
+        visited[idx] = 1;
+        stackX[stackSize] = nx;
+        stackY[stackSize] = ny;
+        stackSize++;
+      }
+    }
+    // Izquierda
+    if (x - 1 >= 0) {
+      const nx = x - 1;
+      const ny = y;
+      const idx = ny * COLS + nx;
+      if ((board[ny] & (1 << nx)) === 0 && !visited[idx]) {
+        visited[idx] = 1;
+        stackX[stackSize] = nx;
+        stackY[stackSize] = ny;
+        stackSize++;
+      }
+    }
+    // Abajo
+    if (y + 1 < ROWS) {
+      const nx = x;
+      const ny = y + 1;
+      const idx = ny * COLS + nx;
+      if ((board[ny] & (1 << nx)) === 0 && !visited[idx]) {
+        visited[idx] = 1;
+        stackX[stackSize] = nx;
+        stackY[stackSize] = ny;
+        stackSize++;
+      }
+    }
+    // Arriba
+    if (y - 1 >= 0) {
+      const nx = x;
+      const ny = y - 1;
+      const idx = ny * COLS + nx;
+      if ((board[ny] & (1 << nx)) === 0 && !visited[idx]) {
+        visited[idx] = 1;
+        stackX[stackSize] = nx;
+        stackY[stackSize] = ny;
+        stackSize++;
       }
     }
   }
 
   const openRV = {
     area: openArea,
-    cells: openCells,
-    minY: openMinY
+    minY: openMinY,
+    bottomProfile
   };
 
   // --- 2. Flood fill de RV cerradas ---
@@ -122,36 +157,73 @@ function analyzeTopology(board) {
 
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
-      if (board[y][x] === EMPTY && !visited[y][x]) {
-        const cells = [];
-        let area = 0;
+      const idx = y * COLS + x;
+      if ((board[y] & (1 << x)) !== 0 || visited[idx]) continue;
 
-        const stack = [{ x, y }];
-        visited[y][x] = true;
+      let area = 0;
+      stackSize = 0;
+      stackX[stackSize] = x;
+      stackY[stackSize] = y;
+      visited[idx] = 1;
+      stackSize++;
 
-        while (stack.length) {
-          const { x: cx, y: cy } = stack.pop();
-          cells.push({ x: cx, y: cy });
-          area++;
+      while (stackSize) {
+        stackSize--;
+        const cx = stackX[stackSize];
+        const cy = stackY[stackSize];
+        area++;
 
-          for (const [dx, dy] of dirs) {
-            const nx = cx + dx;
-            const ny = cy + dy;
-
-            if (
-              nx >= 0 && nx < COLS &&
-              ny >= 0 && ny < ROWS &&
-              board[ny][nx] === EMPTY &&
-              !visited[ny][nx]
-            ) {
-              visited[ny][nx] = true;
-              stack.push({ x: nx, y: ny });
-            }
+        // Derecha
+        if (cx + 1 < COLS) {
+          const nx = cx + 1;
+          const ny = cy;
+          const nidx = ny * COLS + nx;
+          if ((board[ny] & (1 << nx)) === 0 && !visited[nidx]) {
+            visited[nidx] = 1;
+            stackX[stackSize] = nx;
+            stackY[stackSize] = ny;
+            stackSize++;
           }
         }
-
-        closedRVs.push({ area, cells });
+        // Izquierda
+        if (cx - 1 >= 0) {
+          const nx = cx - 1;
+          const ny = cy;
+          const nidx = ny * COLS + nx;
+          if ((board[ny] & (1 << nx)) === 0 && !visited[nidx]) {
+            visited[nidx] = 1;
+            stackX[stackSize] = nx;
+            stackY[stackSize] = ny;
+            stackSize++;
+          }
+        }
+        // Abajo
+        if (cy + 1 < ROWS) {
+          const nx = cx;
+          const ny = cy + 1;
+          const nidx = ny * COLS + nx;
+          if ((board[ny] & (1 << nx)) === 0 && !visited[nidx]) {
+            visited[nidx] = 1;
+            stackX[stackSize] = nx;
+            stackY[stackSize] = ny;
+            stackSize++;
+          }
+        }
+        // Arriba
+        if (cy - 1 >= 0) {
+          const nx = cx;
+          const ny = cy - 1;
+          const nidx = ny * COLS + nx;
+          if ((board[ny] & (1 << nx)) === 0 && !visited[nidx]) {
+            visited[nidx] = 1;
+            stackX[stackSize] = nx;
+            stackY[stackSize] = ny;
+            stackSize++;
+          }
+        }
       }
+
+      closedRVs.push({ area });
     }
   }
 
@@ -184,17 +256,8 @@ function computeStateMetrics(topology) {
   const closed_count = closedRVs.length;
 
   // --- Geometría de la RV abierta ---
-  // Perfil inferior de la RV abierta por columna
-  const bottomProfile = Array(COLS).fill(-1);
+  const bottomProfile = openRV.bottomProfile;
 
-  for (const { x, y } of openRV.cells) {
-    if (y > bottomProfile[x]) {
-      bottomProfile[x] = y;
-    }
-  }
-
-  // Si una columna no tiene RV abierta, su perfil queda en -1
-  // (esto es válido y expresa bloqueo completo)
   let rugosidad = 0;
   for (let x = 0; x < COLS - 1; x++) {
     const h1 = bottomProfile[x];
@@ -213,12 +276,6 @@ function computeStateMetrics(topology) {
   };
 }
 
-function hashBoard(board) {
-  return board
-    .map((row) => row.map((cell) => (cell === EMPTY ? '0' : '1')).join(''))
-    .join(';');
-}
-
 function planBestSequence(board, bagTypeIds) {
   // CONFIGURACIÓN DE RENDIMIENTO
   const BEAM_WIDTH = 15; // Número de "futuros" a mantener vivos. (Bajar a 5-10 si hay lag)
@@ -227,6 +284,8 @@ function planBestSequence(board, bagTypeIds) {
     return { deltaAopen: 0, finalRugosidad: 0, path: [] };
   }
 
+  const bitboard0 = toBitBoard(board);
+
   // 1. Preparar secuencia y métricas iniciales
   const sequence = Array.isArray(bagTypeIds)
     ? bagTypeIds.filter((id) => id !== null && id !== undefined)
@@ -234,14 +293,14 @@ function planBestSequence(board, bagTypeIds) {
 
   if (sequence.length === 0) return { path: [] };
 
-  const topology0 = analyzeTopology(board);
+  const topology0 = analyzeTopology(bitboard0);
   const metrics0 = computeStateMetrics(topology0);
   const A0 = metrics0?.A_open ?? 0;
 
   // 2. Estado inicial del haz (Beam)
   // Cada candidato guarda su tablero actual y la ruta de movimientos que llevó ahí
   let candidates = [{
-    board: board,
+    board: bitboard0,
     path: [],
     A_open: A0,
     rugosidad: metrics0?.geometric?.rugosidad ?? 0
@@ -263,7 +322,7 @@ function planBestSequence(board, bagTypeIds) {
         if (!nextBoard) continue;
 
         // Deduplicación (Optimización crítica)
-        const h = hashBoard(nextBoard);
+        const h = hashBitBoard(nextBoard);
         if (visitedHashes.has(h)) continue;
         visitedHashes.add(h);
 
@@ -296,7 +355,10 @@ function planBestSequence(board, bagTypeIds) {
     });
 
     // Sobreviven solo los mejores (BEAM_WIDTH)
-    candidates = nextCandidates.slice(0, BEAM_WIDTH);
+    const survivors = nextCandidates.slice(0, BEAM_WIDTH);
+    visitedHashes.clear();
+    nextCandidates.length = 0;
+    candidates = survivors;
   }
 
   // 5. Retornar el mejor resultado final
@@ -312,16 +374,17 @@ function planBestSequence(board, bagTypeIds) {
 // --- Capa física pura: alcanzabilidad y consolidación ---
 
 function collides(matrix, board, px, py) {
+  const width = matrix[0].length;
+  if (px < 0 || px + width > COLS) return true;
+
   for (let ry = 0; ry < matrix.length; ry++) {
-    for (let rx = 0; rx < matrix[ry].length; rx++) {
-      if (!matrix[ry][rx]) continue;
+    const ny = py + ry;
+    if (ny >= ROWS) return true;
 
-      const nx = px + rx;
-      const ny = py + ry;
+    const rowMask = matrixMask(matrix[ry]);
+    const shifted = rowMask << px;
 
-      if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
-      if (ny >= 0 && board[ny][nx] !== EMPTY) return true;
-    }
+    if (ny >= 0 && (board[ny] & shifted)) return true;
   }
   return false;
 }
@@ -341,10 +404,6 @@ function findLandingY(matrix, board, x) {
 }
 
 function generatePlacements(board, currentTypeId) {
-  if (!BoardAnalyzer.validate(board)) {
-    console.warn('[AGENT][placements] Fast-Fail: tablero inválido.');
-    return [];
-  }
   if (currentTypeId === null || currentTypeId === undefined) {
     console.warn('[AGENT][placements] Fast-Fail: pieza actual indefinida.');
     return [];
@@ -375,41 +434,88 @@ function generatePlacements(board, currentTypeId) {
 }
 
 function simulatePlacementAndClearLines(board, placement) {
-  if (!BoardAnalyzer.validate(board) || !placement || !placement.position) {
+  if (!placement || !placement.position) {
     console.warn('[AGENT][simulate] Fast-Fail: datos inválidos de simulación.');
-    return board.map((row) => row.slice());
+    return null;
   }
 
-  const clonedBoard = board.map((row) => row.slice());
-  const { x, y, matrix } = placement.position;
-  const typeId = placement.typeId;
+  const { x, y, matrix, rotation } = placement.position;
 
   if (x === undefined || y === undefined || !matrix) {
     console.warn('[AGENT][simulate] Fast-Fail: posición o matriz inválida.');
     return null;
   }
 
+  const newBoard = board.slice();
+  const maskRows = PIECE_MASKS[placement.typeId]?.[rotation];
+
   for (let ry = 0; ry < matrix.length; ry++) {
-    for (let rx = 0; rx < matrix[ry].length; rx++) {
-      if (!matrix[ry][rx]) continue;
+    const ny = y + ry;
+    if (ny < 0) continue;
+    if (ny >= ROWS) return null;
 
-      const nx = x + rx;
-      const ny = y + ry;
-      if (ny < 0) continue; // parte de la pieza aún fuera del tablero
-      if (ny >= ROWS || nx < 0 || nx >= COLS) return null;
+    const rowMask = maskRows ? maskRows[ry] : (matrixMask(matrix[ry]));
+    const shifted = rowMask << x;
 
-      // Colisión inesperada → placement inválido
-      if (clonedBoard[ny][nx] !== EMPTY) return null;
+    if (shifted & newBoard[ny]) return null;
+    newBoard[ny] = newBoard[ny] | shifted;
+  }
 
-      clonedBoard[ny][nx] =
-        typeId !== undefined && typeId !== null ? typeId : 0;
+  // Limpieza de líneas completas
+  const compacted = new Uint16Array(ROWS);
+  let writeIndex = ROWS - 1;
+  for (let r = ROWS - 1; r >= 0; r--) {
+    if (newBoard[r] !== FULL_MASK) {
+      compacted[writeIndex] = newBoard[r];
+      writeIndex--;
     }
   }
-
-  const consolidated = clonedBoard.filter((row) => row.some((cell) => cell === EMPTY));
-  while (consolidated.length < ROWS) {
-    consolidated.unshift(Array(COLS).fill(EMPTY));
+  while (writeIndex >= 0) {
+    compacted[writeIndex] = 0;
+    writeIndex--;
   }
 
-  return consolidated;
+  return compacted;
+}
+
+// --- Utilidades de bitboards y máscaras ---
+
+function toBitBoard(board) {
+  const bitRows = new Uint16Array(ROWS);
+  for (let y = 0; y < ROWS; y++) {
+    let mask = 0;
+    const row = board[y];
+    for (let x = 0; x < COLS; x++) {
+      if (row[x] !== EMPTY) {
+        mask |= (1 << x);
+      }
+    }
+    bitRows[y] = mask;
+  }
+  return bitRows;
+}
+
+function hashBitBoard(bitboard) {
+  return bitboard.join('|');
+}
+
+function matrixMask(row) {
+  let mask = 0;
+  for (let x = 0; x < row.length; x++) {
+    if (row[x]) {
+      mask |= (1 << x);
+    }
+  }
+  return mask;
+}
+
+function buildPieceMasks(tetrominos) {
+  const masks = [];
+  PIECE_TYPES.forEach((key, typeId) => {
+    const rotations = tetrominos[key]?.map((shape) =>
+      shape.map((row) => matrixMask(row))
+    ) || [];
+    masks[typeId] = rotations;
+  });
+  return masks;
 }
