@@ -277,14 +277,14 @@ function computeStateMetrics(topology) {
 }
 
 function planBestSequence(board, bagTypeIds) {
-  // CONFIGURACIÓN DE RENDIMIENTO
-  const BEAM_WIDTH = 15; // Ajustar según rendimiento (5-50)
+  // CONFIGURACIÓN
+  const BEAM_WIDTH = 25; 
+  const SAFE_ZONE_LIMIT = 10; // Si hay menos de 10 líneas de aire, entra en PÁNICO.
 
   if (!BoardAnalyzer.validate(board)) {
     return { deltaAopen: 0, finalRugosidad: 0, path: [] };
   }
 
-  // 1. Preparar secuencia
   const sequence = Array.isArray(bagTypeIds)
     ? bagTypeIds.filter((id) => id !== null && id !== undefined)
     : [];
@@ -295,16 +295,17 @@ function planBestSequence(board, bagTypeIds) {
   const metrics0 = computeStateMetrics(topology0);
   const A0 = metrics0?.A_open ?? 0;
 
-  // 2. Estado inicial del haz
+  // Estado inicial
   let candidates = [{
     board: board,
     path: [],
     A_open: A0,
     rugosidad: metrics0?.geometric?.rugosidad ?? 0,
-    A_closed: metrics0?.A_closed_total ?? 0
+    A_closed: metrics0?.A_closed_total ?? 0,
+    minY: metrics0?.geometric?.minY ?? ROWS // Distancia al techo (Mayor es mejor/más bajo)
   }];
 
-  // 3. Iterar sobre la secuencia (Beam Search)
+  // Bucle de planificación
   for (let i = 0; i < sequence.length; i++) {
     const currentTypeId = sequence[i];
     const nextCandidates = [];
@@ -329,23 +330,40 @@ function planBestSequence(board, bagTypeIds) {
           path: [...candidate.path, placement],
           A_open: metrics.A_open,
           rugosidad: metrics.geometric.rugosidad,
-          A_closed: metrics.A_closed_total
+          A_closed: metrics.A_closed_total,
+          minY: metrics.geometric.minY
         });
       }
     }
 
     if (nextCandidates.length === 0) break;
 
-    // 4. PODA CON NUEVAS PRIORIDADES (SOLICITUD USUARIO)
+    // --- LÓGICA DE PRIORIDADES HÍBRIDA ---
     nextCandidates.sort((a, b) => {
-      // Prioridad 1: Menos Rugosidad (Estabilidad / Superficie Plana)
+      // 1. REGLA DE SUPERVIVENCIA (Safety Override)
+      // Si cualquiera de los dos está en zona de peligro (muy alto), la prioridad #1 es la altura.
+      const aDanger = a.minY < SAFE_ZONE_LIMIT;
+      const bDanger = b.minY < SAFE_ZONE_LIMIT;
+
+      if (aDanger || bDanger) {
+        // Si uno está a salvo y el otro no, gana el salvo.
+        if (aDanger !== bDanger) return aDanger ? 1 : -1; 
+        // Si ambos están en peligro, gana el que esté más lejos del techo (Mayor minY).
+        if (a.minY !== b.minY) return b.minY - a.minY;
+      }
+
+      // 2. REGLA DE ESTILO (Zona Segura)
+      // Si estamos a salvo, aplicamos tu lógica de "Arquitecto Plano".
+      
+      // Prioridad A: Menos Rugosidad (Planitud)
       if (a.rugosidad !== b.rugosidad) return a.rugosidad - b.rugosidad;
       
-      // Prioridad 2: Más Área Abierta (Libertad de movimiento)
-      if (a.A_open !== b.A_open) return b.A_open - a.A_open;
-      
-      // Prioridad 3: Menos Área Cerrada (Seguridad / Huecos)
-      return a.A_closed - b.A_closed;
+      // Prioridad B: Integridad Estructural (Evitar agujeros cerrados)
+      // (Subí esto sobre A_open porque los huecos suelen causar desastres a largo plazo)
+      if (a.A_closed !== b.A_closed) return a.A_closed - b.A_closed;
+
+      // Prioridad C: Maximizar Aire (A_open)
+      return b.A_open - a.A_open;
     });
 
     candidates = nextCandidates.slice(0, BEAM_WIDTH);
@@ -359,7 +377,6 @@ function planBestSequence(board, bagTypeIds) {
     deltaAopen: best.A_open - A0
   };
 }
-
 // --- Capa física pura: alcanzabilidad y consolidación ---
 
 function collides(matrix, board, px, py) {
