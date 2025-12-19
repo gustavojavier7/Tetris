@@ -61,11 +61,99 @@ function think(board, currentTypeId, nextTypeId) {
 // --- API mínima para evaluación topológica ---
 
 function analyzeTopology(board) {
-  // TODO: Implementar detección de RV abierta y RV cerradas
-  return {
-    openRV: null,          // { area, cells, minY }
-    closedRVs: []          // Array<{ area, cells }>
+  const visited = Array.from({ length: ROWS }, () =>
+    Array(COLS).fill(false)
+  );
+
+  const openCells = [];
+  let openArea = 0;
+  let openMinY = ROWS;
+
+  const dirs = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1]
+  ];
+
+  // --- 1. Flood fill desde el techo: RV abierta ---
+  const stack = [];
+
+  for (let x = 0; x < COLS; x++) {
+    if (board[0][x] === EMPTY && !visited[0][x]) {
+      visited[0][x] = true;
+      stack.push({ x, y: 0 });
+    }
+  }
+
+  while (stack.length) {
+    const { x, y } = stack.pop();
+
+    openCells.push({ x, y });
+    openArea++;
+    if (y < openMinY) openMinY = y;
+
+    for (const [dx, dy] of dirs) {
+      const nx = x + dx;
+      const ny = y + dy;
+
+      if (
+        nx >= 0 && nx < COLS &&
+        ny >= 0 && ny < ROWS &&
+        board[ny][nx] === EMPTY &&
+        !visited[ny][nx]
+      ) {
+        visited[ny][nx] = true;
+        stack.push({ x: nx, y: ny });
+      }
+    }
+  }
+
+  const openRV = {
+    area: openArea,
+    cells: openCells,
+    minY: openMinY
   };
+
+  // --- 2. Flood fill de RV cerradas ---
+  const closedRVs = [];
+
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      if (board[y][x] === EMPTY && !visited[y][x]) {
+        const cells = [];
+        let area = 0;
+
+        const stack = [{ x, y }];
+        visited[y][x] = true;
+
+        while (stack.length) {
+          const { x: cx, y: cy } = stack.pop();
+          cells.push({ x: cx, y: cy });
+          area++;
+
+          for (const [dx, dy] of dirs) {
+            const nx = cx + dx;
+            const ny = cy + dy;
+
+            if (
+              nx >= 0 && nx < COLS &&
+              ny >= 0 && ny < ROWS &&
+              board[ny][nx] === EMPTY &&
+              !visited[ny][nx]
+            ) {
+              visited[ny][nx] = true;
+              stack.push({ x: nx, y: ny });
+            }
+          }
+        }
+
+        closedRVs.push({ area, cells });
+      }
+    }
+  }
+
+  return { openRV, closedRVs };
 }
 
 function computeStateMetrics(topology) {
