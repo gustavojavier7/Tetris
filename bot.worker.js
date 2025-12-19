@@ -345,13 +345,13 @@ function planBestSequence(board, bagTypeIds) {
 
     // 4. PODA (SELECCIÓN NATURAL)
     // Ordenamos los candidatos:
-    // 1. Menos área cerrada (Seguridad)
-    // 2. Más área abierta (Libertad)
+    // 1. Más área abierta (Libertad)
+    // 2. Menos área cerrada (Seguridad)
     // 3. Menos rugosidad (Estabilidad)
     nextCandidates.sort((a, b) => {
+      if (a.A_open !== b.A_open) return b.A_open - a.A_open;        // Mayor es mejor
       if (a.A_closed !== b.A_closed) return a.A_closed - b.A_closed; // Menor es mejor
-      if (a.A_open !== b.A_open) return b.A_open - a.A_open;       // Mayor es mejor
-      return a.rugosidad - b.rugosidad;                            // Menor es mejor
+      return a.rugosidad - b.rugosidad;                             // Menor es mejor
     });
 
     // Sobreviven solo los mejores (BEAM_WIDTH)
