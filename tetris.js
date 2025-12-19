@@ -203,7 +203,6 @@ class TetrisGame {
     this.keys = { left: false, right: false, down: false };
     this.dasTimer = 0;
     this.areTimer = 0;
-    this.softDropTimer = 0;
     this.fallAccumulator = 0;
 
     this.bag = [];
@@ -854,15 +853,6 @@ class TetrisGame {
     }
   }
 
-  softDrop() {
-    if (!this.current || this.areTimer > 0) return;
-    if (!this.collides(this.current.matrix, this.current.x, this.current.y + 1)) {
-      this.current.y++;
-      this.score += 1; // Puntos extra por acelerar
-      this.render();
-    }
-  }
-
   hardDrop() {
     if (!this.current || this.areTimer > 0) return;
     // Reutilizamos getDropY() que ya tenías para el Ghost
@@ -921,10 +911,6 @@ class TetrisGame {
       y++;
     }
     return y;
-  }
-
-  executeBotMove() {
-    console.warn('[AGENT][executeBotMove] Fast-Fail: ruta obsoleta. El bot ahora simula presión de teclas humanas.');
   }
 
   applyGravity() {

@@ -1,8 +1,4 @@
-// bot.worker.js - Worker de IA para Tetris preparado para evaluación topológica
-
-// Este worker NO decide movimientos todavía.
-// Su rol es preparar la infraestructura para una evaluación
-// topológica del tablero basada en Regiones Vacías (RV).
+// bot.worker.js - Worker de IA para evaluación topológica y planificación de colocaciones
 
 const COLS = 12;
 const ROWS = 22;
@@ -284,54 +280,6 @@ function planBestSequence(board, bagTypeIds) {
   }
 
   return dfs(board, 0);
-}
-
-function compareStates(prevMetrics, nextMetrics) {
-  if (!prevMetrics || !nextMetrics) return 'EQUIVALENT';
-
-  if (nextMetrics.A_closed_total > prevMetrics.A_closed_total) return 'WORSE';
-  if (nextMetrics.A_closed_total < prevMetrics.A_closed_total) return 'BETTER';
-
-  if (nextMetrics.A_open > prevMetrics.A_open) return 'BETTER';
-  if (nextMetrics.A_open < prevMetrics.A_open) return 'WORSE';
-
-  const prevRug = prevMetrics.geometric?.rugosidad;
-  const nextRug = nextMetrics.geometric?.rugosidad;
-  if (typeof nextRug === 'number' && typeof prevRug === 'number') {
-    if (nextRug < prevRug) return 'BETTER';
-    if (nextRug > prevRug) return 'WORSE';
-  }
-
-  return 'EQUIVALENT';
-}
-
-function chooseBestPlacement(board, placements) {
-  if (!Array.isArray(placements) || placements.length === 0) return null;
-
-  let bestPlacement = null;
-  let bestMetrics = null;
-
-  placements.forEach((placement) => {
-    const simulatedBoard = simulatePlacementAndClearLines(board, placement);
-    if (!simulatedBoard) return; // placement físicamente inválido
-
-    const topology = analyzeTopology(simulatedBoard);
-    const metrics = computeStateMetrics(topology);
-
-    if (!bestPlacement) {
-      bestPlacement = placement;
-      bestMetrics = metrics;
-      return;
-    }
-
-    const verdict = compareStates(bestMetrics, metrics);
-    if (verdict === 'BETTER') {
-      bestPlacement = placement;
-      bestMetrics = metrics;
-    }
-  });
-
-  return { bestPlacement, bestMetrics };
 }
 
 // --- Capa física pura: alcanzabilidad y consolidación ---
