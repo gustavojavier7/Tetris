@@ -75,27 +75,28 @@ class BoardAnalyzer {
 self.onmessage = function (e) {
   const { type, board, currentTypeId, nextTypeId, requestId } = e.data;
   if (type === 'THINK') {
-    const ghost = think(board, currentTypeId, nextTypeId);
-    self.postMessage({ type: 'DECISION', ghost, requestId });
+    const decision = think(board, currentTypeId, nextTypeId);
+    self.postMessage({ type: 'DECISION', ...decision, requestId });
   }
 };
 
 function think(board, currentTypeId, nextTypeId) {
   if (!BoardAnalyzer.validate(board) || currentTypeId === null || currentTypeId === undefined) {
     console.warn('[AGENT][worker] Fast-Fail: datos inválidos para pensar.');
-    return null;
+    return { ghost: null, mode: 'SURVIVAL' };
   }
 
   const pieceKey = PIECE_TYPES[currentTypeId];
   const shapes = TETROMINOS[pieceKey];
   if (!shapes) {
     console.warn('[AGENT][worker] Fast-Fail: tipo de pieza desconocido.');
-    return null;
+    return { ghost: null, mode: 'SURVIVAL' };
   }
 
   const preMetrics = BoardAnalyzer.buildMetrics(board);
   const survivalMode = preMetrics.totalHoles > 0 || BoardAnalyzer.hasLeftSideHole(preMetrics);
   const attackMode = BoardAnalyzer.isPerfect(preMetrics);
+  const mode = attackMode ? 'ATTACK' : survivalMode ? 'SURVIVAL' : 'SURVIVAL';
 
   let best = null;
 
@@ -126,9 +127,13 @@ function think(board, currentTypeId, nextTypeId) {
         matrix
       };
 
-      const score = attackMode
+      let score = attackMode
         ? scoreAttack(placement)
         : scoreSurvival(placement, preMetrics, nextTypeId);
+
+      if (pieceKey === 'I' && placement.linesCleared === 4) {
+        score += 1_000_000_000;
+      }
 
       if (!best || score > best.score || (score === best.score && placement.linesCleared > best.linesCleared)) {
         best = { ...placement, score };
@@ -136,15 +141,17 @@ function think(board, currentTypeId, nextTypeId) {
     }
   });
 
-  if (!best) return null;
+  if (!best) return { ghost: null, mode };
 
-  return {
+  const ghost = {
     typeId: currentTypeId,
     matrix: best.matrix,
     rotation: best.rotation,
     x: best.x,
     y: best.y
   };
+
+  return { ghost, mode };
 }
 
 function findLandingY(matrix, board, x) {
@@ -215,12 +222,20 @@ function simulatePlacement(matrix, board, px, py, typeId) {
 }
 
 function scoreAttack(placement) {
-  if (placement.holesAfter > 0) return -Infinity; // no hay ataque si el tablero deja de ser perfecto
-  if (placement.chimneyCover > 0) return -1_000_000; // proteger chimenea a toda costa
+  // En modo ataque, el tablero debe mantenerse inmaculado (sin huecos)
+  if (placement.holesAfter > 0) return -Infinity;
+
+  // REGLA DE CHIMENEA:
+  // Si tapamos la chimenea (cover > 0) Y NO hacemos Tetris (lines < 4), es ilegal.
+  // Pero si lines == 4, permitimos la cobertura (es un Tetris válido).
+  if (placement.chimneyCover > 0 && placement.linesCleared < 4) {
+    return -1_000_000;
+  }
 
   const heightPenalty = placement.maxHeightAfter * 20;
   const bumpinessPenalty = placement.bumpinessAfter * 5;
-  const lineReward = placement.linesCleared * 4000;
+  // Incentivo alto para preparar o ejecutar Tetris
+  const lineReward = placement.linesCleared * 10000;
 
   return lineReward - heightPenalty - bumpinessPenalty;
 }
