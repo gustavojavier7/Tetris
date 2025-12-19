@@ -514,11 +514,20 @@ class TetrisGame {
     this.updateIndicator();
 
     try {
+      const bagSequence = [this.current.typeId];
+      if (this.next && this.next.typeId !== undefined && this.next.typeId !== null) {
+        bagSequence.push(this.next.typeId);
+      }
+      if (Array.isArray(this.bag) && this.bag.length > 0) {
+        bagSequence.push(...[...this.bag].reverse());
+      }
+
       this.botWorker.postMessage({
         type: 'THINK',
         board: this.board.map(row => [...row]),
         currentTypeId: this.current.typeId,
         nextTypeId: this.next ? this.next.typeId : null,
+        bagTypeIds: bagSequence,
         requestId: this.pendingBotRequestId
       });
     } catch (err) {
