@@ -50,17 +50,13 @@ function think(board, currentTypeId, nextTypeId) {
     return { ghost: null, mode: 'UNDEFINED' };
   }
 
-  const { bestPlacement } = chooseBestPlacement(board, placements);
+  const { bestPlacement } = chooseBestPlacement(board, placements) || {};
 
-  // Construcción parcial de ghost; se completará cuando matrix/rotation estén disponibles.
   let ghost = null;
   if (bestPlacement && bestPlacement.position) {
     const { x, y, rotation, matrix } = bestPlacement.position;
     if (x !== undefined && y !== undefined && rotation !== undefined && matrix) {
       ghost = { typeId: currentTypeId, rotation, x, y, matrix };
-    } else {
-      // TODO: ensamblar ghost con datos completos de colocación (matrix, rotación, etc.)
-      ghost = null;
     }
   }
 
@@ -243,15 +239,13 @@ function compareStates(prevMetrics, nextMetrics) {
 function chooseBestPlacement(board, placements) {
   if (!Array.isArray(placements) || placements.length === 0) return null;
 
-  const baseTopology = analyzeTopology(board);
-  const baseMetrics = computeStateMetrics(baseTopology);
-
   let bestPlacement = null;
-  let bestMetrics = baseMetrics;
+  let bestMetrics = null;
 
   placements.forEach((placement) => {
     const simulatedBoard = simulatePlacementAndClearLines(board, placement);
     if (!simulatedBoard) return; // placement físicamente inválido
+
     const topology = analyzeTopology(simulatedBoard);
     const metrics = computeStateMetrics(topology);
 
@@ -262,7 +256,7 @@ function chooseBestPlacement(board, placements) {
     }
 
     const verdict = compareStates(bestMetrics, metrics);
-    if (verdict === 'WORSE') {
+    if (verdict === 'BETTER') {
       bestPlacement = placement;
       bestMetrics = metrics;
     }
