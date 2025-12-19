@@ -184,6 +184,7 @@ class TetrisGame {
     this.pendingBotRequestId = null;
     this.isBotThinking = false;
     this.botActionTimer = 0;
+    this.botMode = null;
 
     this.score = 0;
     this.lines = 0;
@@ -316,6 +317,7 @@ class TetrisGame {
       this.isBotThinking = false;
       this.ghost = null;
       this.botPlan = null;
+      this.botMode = null;
       if (this.iaAssist) {
         this.requestBotMove();
       }
@@ -399,7 +401,7 @@ class TetrisGame {
     if (this.iaAssist) {
       this.indicator.classList.add('balanced');
       this.indicator.classList.add(this.isBotThinking ? 'bot-thinking' : 'bot-idle');
-      this.indicator.textContent = this.isBotThinking ? 'CALCULANDO...' : 'LISTO';
+      this.indicator.textContent = this.isBotThinking ? 'CALCULANDO...' : (this.botMode || 'LISTO');
     } else {
       this.indicator.classList.add('bot-idle');
       this.indicator.textContent = 'MANUAL';
@@ -529,12 +531,13 @@ class TetrisGame {
   }
 
   handleWorkerMessage(e) {
-    const { type, ghost, requestId } = e.data || {};
+    const { type, ghost, requestId, mode } = e.data || {};
     if (type !== 'DECISION') return;
     if (this.pendingBotRequestId !== null && requestId !== this.pendingBotRequestId) return;
 
     this.pendingBotRequestId = null;
     this.isBotThinking = false;
+    this.botMode = mode || this.botMode;
 
     if (this.iaAssist) {
       this.ghost = ghost;
@@ -997,6 +1000,7 @@ class TetrisGame {
     this.pendingBotRequestId = null;
     this.ghost = null;
     this.botActionTimer = 0;
+    this.botMode = null;
     this.stopTimer();
     this.updateTimerDisplay();
     document.getElementById('tetris-stats-score').textContent = this.score;
