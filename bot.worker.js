@@ -251,6 +251,7 @@ function chooseBestPlacement(board, placements) {
 
   placements.forEach((placement) => {
     const simulatedBoard = simulatePlacementAndClearLines(board, placement);
+    if (!simulatedBoard) return; // placement físicamente inválido
     const topology = analyzeTopology(simulatedBoard);
     const metrics = computeStateMetrics(topology);
 
@@ -288,11 +289,15 @@ function collides(matrix, board, px, py) {
 }
 
 function findLandingY(matrix, board, x) {
-  if (collides(matrix, board, x, 0)) return null;
+  // Permitir spawn por encima del techo (y < 0)
+  let y = -matrix.length;
 
-  let y = 0;
+  // Si incluso en spawn inicial colisiona, no es placement válido
+  if (collides(matrix, board, x, y)) return null;
+
   while (!collides(matrix, board, x, y + 1)) {
     y++;
+    if (y > ROWS) return null; // guard de seguridad
   }
   return y;
 }
@@ -343,7 +348,7 @@ function simulatePlacementAndClearLines(board, placement) {
 
   if (x === undefined || y === undefined || !matrix) {
     console.warn('[AGENT][simulate] Fast-Fail: posición o matriz inválida.');
-    return clonedBoard;
+    return null;
   }
 
   for (let ry = 0; ry < matrix.length; ry++) {
@@ -352,9 +357,14 @@ function simulatePlacementAndClearLines(board, placement) {
 
       const nx = x + rx;
       const ny = y + ry;
-      if (ny < 0 || ny >= ROWS || nx < 0 || nx >= COLS) continue;
+      if (ny < 0) continue; // parte de la pieza aún fuera del tablero
+      if (ny >= ROWS || nx < 0 || nx >= COLS) return null;
 
-      clonedBoard[ny][nx] = typeId !== undefined && typeId !== null ? typeId : 0;
+      // Colisión inesperada → placement inválido
+      if (clonedBoard[ny][nx] !== EMPTY) return null;
+
+      clonedBoard[ny][nx] =
+        typeId !== undefined && typeId !== null ? typeId : 0;
     }
   }
 
