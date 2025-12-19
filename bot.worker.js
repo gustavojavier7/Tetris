@@ -7,6 +7,16 @@
 const COLS = 12;
 const ROWS = 22;
 const EMPTY = -1;
+const PIECE_TYPES = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
+const TETROMINOS = {
+  I: [[[1,1,1,1]], [[1],[1],[1],[1]]],
+  O: [[[1,1],[1,1]]],
+  T: [[[0,1,0],[1,1,1]], [[1,0],[1,1],[1,0]], [[1,1,1],[0,1,0]], [[0,1],[1,1],[0,1]]],
+  S: [[[0,1,1],[1,1,0]], [[1,0],[1,1],[0,1]]],
+  Z: [[[1,1,0],[0,1,1]], [[0,1],[1,1],[1,0]]],
+  J: [[[1,0,0],[1,1,1]], [[1,1],[1,0],[1,0]], [[1,1,1],[0,0,1]], [[0,1],[0,1],[1,1]]],
+  L: [[[0,0,1],[1,1,1]], [[1,0],[1,0],[1,1]], [[1,1,1],[1,0,0]], [[1,1],[0,1],[0,1]]]
+};
 
 class BoardAnalyzer {
   static validate(board) {
@@ -260,14 +270,98 @@ function chooseBestPlacement(board, placements) {
   return { bestPlacement, bestMetrics };
 }
 
-// --- PLACEHOLDERS CONTROLADOS PARA LA INTEGRACIÓN DE SIMULACIÓN ---
+// --- Capa física pura: alcanzabilidad y consolidación ---
+
+function collides(matrix, board, px, py) {
+  for (let ry = 0; ry < matrix.length; ry++) {
+    for (let rx = 0; rx < matrix[ry].length; rx++) {
+      if (!matrix[ry][rx]) continue;
+
+      const nx = px + rx;
+      const ny = py + ry;
+
+      if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
+      if (ny >= 0 && board[ny][nx] !== EMPTY) return true;
+    }
+  }
+  return false;
+}
+
+function findLandingY(matrix, board, x) {
+  if (collides(matrix, board, x, 0)) return null;
+
+  let y = 0;
+  while (!collides(matrix, board, x, y + 1)) {
+    y++;
+  }
+  return y;
+}
 
 function generatePlacements(board, currentTypeId) {
-  // TODO: Generar todas las posiciones alcanzables para la pieza actual.
-  return [];
+  if (!BoardAnalyzer.validate(board)) {
+    console.warn('[AGENT][placements] Fast-Fail: tablero inválido.');
+    return [];
+  }
+  if (currentTypeId === null || currentTypeId === undefined) {
+    console.warn('[AGENT][placements] Fast-Fail: pieza actual indefinida.');
+    return [];
+  }
+
+  const typeKey = PIECE_TYPES[currentTypeId];
+  const shapes = typeKey ? TETROMINOS[typeKey] : null;
+  if (!shapes || !Array.isArray(shapes)) return [];
+
+  const placements = [];
+
+  shapes.forEach((matrix, rotation) => {
+    const width = matrix[0].length;
+    const maxX = COLS - width;
+
+    for (let x = 0; x <= maxX; x++) {
+      const y = findLandingY(matrix, board, x);
+      if (y === null || y === undefined) continue;
+
+      placements.push({
+        typeId: currentTypeId,
+        position: { x, y, rotation, matrix }
+      });
+    }
+  });
+
+  return placements;
 }
 
 function simulatePlacementAndClearLines(board, placement) {
-  // TODO: Simular la pieza en el tablero y eliminar líneas completas.
-  return board;
+  if (!BoardAnalyzer.validate(board) || !placement || !placement.position) {
+    console.warn('[AGENT][simulate] Fast-Fail: datos inválidos de simulación.');
+    return board.map((row) => row.slice());
+  }
+
+  const clonedBoard = board.map((row) => row.slice());
+  const { x, y, matrix } = placement.position;
+  const typeId = placement.typeId;
+
+  if (x === undefined || y === undefined || !matrix) {
+    console.warn('[AGENT][simulate] Fast-Fail: posición o matriz inválida.');
+    return clonedBoard;
+  }
+
+  for (let ry = 0; ry < matrix.length; ry++) {
+    for (let rx = 0; rx < matrix[ry].length; rx++) {
+      if (!matrix[ry][rx]) continue;
+
+      const nx = x + rx;
+      const ny = y + ry;
+      if (ny < 0 || ny >= ROWS || nx < 0 || nx >= COLS) continue;
+
+      clonedBoard[ny][nx] = typeId !== undefined && typeId !== null ? typeId : 0;
+    }
+  }
+
+  const consolidated = clonedBoard.filter((row) => row.some((cell) => cell === EMPTY));
+  while (consolidated.length < ROWS) {
+    consolidated.unshift(Array(COLS).fill(EMPTY));
+  }
+
+  return consolidated;
 }
