@@ -40,7 +40,7 @@ function think(board, currentTypeId, nextTypeId, bagTypeIds) {
   }
 
   // La física y alcanzabilidad se resuelven fuera del evaluador; aquí solo se observa el tablero consolidado.
-  const sequence = Array.isArray(bagTypeIds) && bagTypeIds.length > 0
+  const sequence = Array.isArray(bagTypeIds)
     ? bagTypeIds.filter((id) => id !== null && id !== undefined)
     : [currentTypeId, nextTypeId].filter((id) => id !== null && id !== undefined);
 
@@ -214,65 +214,93 @@ function computeStateMetrics(topology) {
 }
 
 function hashBoard(board) {
-  return board.map((row) => row.join(',')).join(';');
+  return board
+    .map((row) => row.map((cell) => (cell === EMPTY ? '0' : '1')).join(''))
+    .join(';');
 }
 
 function planBestSequence(board, bagTypeIds) {
   if (!BoardAnalyzer.validate(board)) {
     console.warn('[AGENT][planner] Fast-Fail: tablero inválido para planificar.');
-    return { delta: 0, path: [] };
+    return { deltaAopen: 0, finalRugosidad: 0, path: [] };
   }
 
   const sequence = Array.isArray(bagTypeIds)
     ? bagTypeIds.filter((id) => id !== null && id !== undefined)
     : [];
 
-  if (sequence.length === 0) {
-    return { delta: 0, path: [] };
-  }
-
   const topology0 = analyzeTopology(board);
   const metrics0 = computeStateMetrics(topology0);
   const A0 = metrics0?.A_open ?? 0;
 
+  if (sequence.length === 0) {
+    return {
+      deltaAopen: 0,
+      finalRugosidad: metrics0?.geometric?.rugosidad ?? 0,
+      path: []
+    };
+  }
+
   const memo = new Map();
 
+  function isBetter(candidate, current) {
+    if (!current) return true;
+    if (candidate.deltaAopen > current.deltaAopen) return true;
+    if (candidate.deltaAopen < current.deltaAopen) return false;
+
+    if (candidate.deltaAopen <= 0 && current.deltaAopen <= 0) {
+      if (candidate.finalRugosidad < current.finalRugosidad) return true;
+      if (candidate.finalRugosidad > current.finalRugosidad) return false;
+    }
+
+    return false;
+  }
+
   function dfs(currentBoard, index) {
+    const key = `${index}|${hashBoard(currentBoard)}`;
+    if (memo.has(key)) return memo.get(key);
+
     if (index >= sequence.length) {
       const topology = analyzeTopology(currentBoard);
       const metrics = computeStateMetrics(topology);
       const Af = metrics?.A_open ?? 0;
-      return { delta: Af - A0, path: [] };
+      const finalRugosidad = metrics?.geometric?.rugosidad ?? 0;
+      const result = { deltaAopen: Af - A0, finalRugosidad, path: [] };
+      memo.set(key, result);
+      return result;
     }
-
-    const key = `${index}|${hashBoard(currentBoard)}`;
-    if (memo.has(key)) return memo.get(key);
 
     const placements = generatePlacements(currentBoard, sequence[index]);
     let bestResult = null;
 
-    placements.forEach((placement) => {
+    for (const placement of placements) {
       const nextBoard = simulatePlacementAndClearLines(currentBoard, placement);
-      if (!nextBoard) return;
+      if (!nextBoard) continue;
 
       const child = dfs(nextBoard, index + 1);
-      if (!child) return;
+      if (!child) continue;
 
       const candidate = {
-        delta: child.delta,
+        deltaAopen: child.deltaAopen,
+        finalRugosidad: child.finalRugosidad,
         path: [placement, ...child.path]
       };
 
-      if (!bestResult || candidate.delta > bestResult.delta) {
+      if (isBetter(candidate, bestResult)) {
         bestResult = candidate;
       }
-    });
+    }
 
     if (!bestResult) {
       const topology = analyzeTopology(currentBoard);
       const metrics = computeStateMetrics(topology);
       const Af = metrics?.A_open ?? 0;
-      bestResult = { delta: Af - A0, path: [] };
+      const finalRugosidad = metrics?.geometric?.rugosidad ?? 0;
+      bestResult = {
+        deltaAopen: Af - A0,
+        finalRugosidad,
+        path: []
+      };
     }
 
     memo.set(key, bestResult);
