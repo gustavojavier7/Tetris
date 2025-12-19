@@ -157,11 +157,57 @@ function analyzeTopology(board) {
 }
 
 function computeStateMetrics(topology) {
-  // TODO: Derivar métricas del estado (A_open, A_closed_total, etc.)
+  if (!topology || !topology.openRV) {
+    return {
+      A_open: 0,
+      A_closed_total: 0,
+      closed_count: 0,
+      geometric: {
+        minY: ROWS,
+        rugosidad: 0
+      }
+    };
+  }
+
+  const { openRV, closedRVs } = topology;
+
+  // --- Métricas topológicas básicas ---
+  const A_open = openRV.area;
+
+  let A_closed_total = 0;
+  for (const rv of closedRVs) {
+    A_closed_total += rv.area;
+  }
+
+  const closed_count = closedRVs.length;
+
+  // --- Geometría de la RV abierta ---
+  // Perfil inferior de la RV abierta por columna
+  const bottomProfile = Array(COLS).fill(-1);
+
+  for (const { x, y } of openRV.cells) {
+    if (y > bottomProfile[x]) {
+      bottomProfile[x] = y;
+    }
+  }
+
+  // Si una columna no tiene RV abierta, su perfil queda en -1
+  // (esto es válido y expresa bloqueo completo)
+  let rugosidad = 0;
+  for (let x = 0; x < COLS - 1; x++) {
+    const h1 = bottomProfile[x];
+    const h2 = bottomProfile[x + 1];
+    rugosidad += Math.abs(h1 - h2);
+  }
+
   return {
-    A_open: 0,
-    A_closed_total: 0,
-    geometric: {}
+    A_open,
+    A_closed_total,
+    closed_count,
+    geometric: {
+      minY: openRV.minY,
+      rugosidad
+    }
   };
 }
 
