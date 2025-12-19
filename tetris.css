@@ -348,8 +348,6 @@ button:active {
         border: 1px solid #000;
 }
 
-/* --- AGREGA ESTO A TU CSS PARA HACER VISIBLES LAS PIEZAS --- */
-
 /* Aplica a los bloques dentro del área de juego y en la previsualización */
 #tetris-area > div,
 #tetris-nextpuzzle > div {
@@ -367,15 +365,6 @@ button:active {
 .block4 { background: #B00020; }
 .block5 { background: #5A5A5A; }
 .block6 { background: #FF8C00; }
-
-/* Previsualización fantasma del bot */
-.bot-ghost {
-        opacity: 0.4;
-        position: absolute;
-        pointer-events: none;
-        z-index: 5;
-        border: 1px dashed rgba(255, 255, 255, 0.7);
-}
 
 /* Estilo cuando el bot controla la pieza */
 .bot-controlled {
