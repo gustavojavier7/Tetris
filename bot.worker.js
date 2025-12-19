@@ -25,14 +25,14 @@ class BoardAnalyzer {
 }
 
 self.onmessage = function (e) {
-  const { type, board, currentTypeId, nextTypeId, requestId } = e.data;
+  const { type, board, currentTypeId, nextTypeId, requestId, bagTypeIds } = e.data;
   if (type === 'THINK') {
-    const decision = think(board, currentTypeId, nextTypeId);
+    const decision = think(board, currentTypeId, nextTypeId, bagTypeIds);
     self.postMessage({ type: 'DECISION', ...decision, requestId });
   }
 };
 
-function think(board, currentTypeId, nextTypeId) {
+function think(board, currentTypeId, nextTypeId, bagTypeIds) {
   if (!BoardAnalyzer.validate(board)) {
     console.warn('[AGENT][worker] Fast-Fail: datos inválidos para pensar.');
     return { ghost: null, mode: 'UNDEFINED' };
@@ -44,23 +44,23 @@ function think(board, currentTypeId, nextTypeId) {
   }
 
   // La física y alcanzabilidad se resuelven fuera del evaluador; aquí solo se observa el tablero consolidado.
-  const placements = generatePlacements(board, currentTypeId);
+  const sequence = Array.isArray(bagTypeIds) && bagTypeIds.length > 0
+    ? bagTypeIds.filter((id) => id !== null && id !== undefined)
+    : [currentTypeId, nextTypeId].filter((id) => id !== null && id !== undefined);
 
-  if (!placements || placements.length === 0) {
-    return { ghost: null, mode: 'UNDEFINED' };
-  }
-
-  const { bestPlacement } = chooseBestPlacement(board, placements) || {};
+  const planResult = planBestSequence(board, sequence);
+  const nextPlacement = planResult?.path?.[0];
 
   let ghost = null;
-  if (bestPlacement && bestPlacement.position) {
-    const { x, y, rotation, matrix } = bestPlacement.position;
+  if (nextPlacement && nextPlacement.position) {
+    const { x, y, rotation, matrix } = nextPlacement.position;
+    const typeId = nextPlacement.typeId;
     if (x !== undefined && y !== undefined && rotation !== undefined && matrix) {
-      ghost = { typeId: currentTypeId, rotation, x, y, matrix };
+      ghost = { typeId, rotation, x, y, matrix };
     }
   }
 
-  const mode = 'UNDEFINED';
+  const mode = 'PLANNING';
   return { ghost, mode };
 }
 
@@ -215,6 +215,75 @@ function computeStateMetrics(topology) {
       rugosidad
     }
   };
+}
+
+function hashBoard(board) {
+  return board.map((row) => row.join(',')).join(';');
+}
+
+function planBestSequence(board, bagTypeIds) {
+  if (!BoardAnalyzer.validate(board)) {
+    console.warn('[AGENT][planner] Fast-Fail: tablero inválido para planificar.');
+    return { delta: 0, path: [] };
+  }
+
+  const sequence = Array.isArray(bagTypeIds)
+    ? bagTypeIds.filter((id) => id !== null && id !== undefined)
+    : [];
+
+  if (sequence.length === 0) {
+    return { delta: 0, path: [] };
+  }
+
+  const topology0 = analyzeTopology(board);
+  const metrics0 = computeStateMetrics(topology0);
+  const A0 = metrics0?.A_open ?? 0;
+
+  const memo = new Map();
+
+  function dfs(currentBoard, index) {
+    if (index >= sequence.length) {
+      const topology = analyzeTopology(currentBoard);
+      const metrics = computeStateMetrics(topology);
+      const Af = metrics?.A_open ?? 0;
+      return { delta: Af - A0, path: [] };
+    }
+
+    const key = `${index}|${hashBoard(currentBoard)}`;
+    if (memo.has(key)) return memo.get(key);
+
+    const placements = generatePlacements(currentBoard, sequence[index]);
+    let bestResult = null;
+
+    placements.forEach((placement) => {
+      const nextBoard = simulatePlacementAndClearLines(currentBoard, placement);
+      if (!nextBoard) return;
+
+      const child = dfs(nextBoard, index + 1);
+      if (!child) return;
+
+      const candidate = {
+        delta: child.delta,
+        path: [placement, ...child.path]
+      };
+
+      if (!bestResult || candidate.delta > bestResult.delta) {
+        bestResult = candidate;
+      }
+    });
+
+    if (!bestResult) {
+      const topology = analyzeTopology(currentBoard);
+      const metrics = computeStateMetrics(topology);
+      const Af = metrics?.A_open ?? 0;
+      bestResult = { delta: Af - A0, path: [] };
+    }
+
+    memo.set(key, bestResult);
+    return bestResult;
+  }
+
+  return dfs(board, 0);
 }
 
 function compareStates(prevMetrics, nextMetrics) {
