@@ -727,7 +727,7 @@ class TetrisGame {
       }
     }
 
-    actions.push('DROP');
+    actions.push('SOFT_DROP');
 
     this.botPlan = {
       pieceId: this.current.typeId
@@ -816,17 +816,33 @@ class TetrisGame {
         this.move(dir);
         return this.current && this.current.x !== prevX;
       }
-      case 'DROP': {
-        if (typeof this.forceMoveDown === 'function') {
-          this.forceMoveDown();
-        } else {
-          this.hardDrop();
-        }
-        return true;
+      case 'DROP':
+      case 'SOFT_DROP': {
+        return this.performBotSoftDrop();
       }
       default:
         return false;
     }
+  }
+
+  performBotSoftDrop() {
+    const result = this.botSoftDropStep();
+    if (result === 'MOVED') {
+      this.botActionQueue.unshift('SOFT_DROP');
+      return true;
+    }
+    return result === 'LOCKED';
+  }
+
+  botSoftDropStep() {
+    if (!this.current || this.areTimer > 0) return 'BLOCKED';
+    if (!this.collides(this.current.matrix, this.current.x, this.current.y + 1)) {
+      this.current.y++;
+      this.render();
+      return 'MOVED';
+    }
+    this.lockPiece();
+    return 'LOCKED';
   }
 
   handleHorizontalInput(deltaTime) {
