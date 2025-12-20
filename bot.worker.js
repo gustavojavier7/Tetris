@@ -242,10 +242,27 @@ function analyzeTopology(board) {
 
 function computeSolidMinY(board) {
   if (!board || typeof board.length !== 'number') return ROWS;
-  for (let y = 0; y < ROWS; y++) {
-    if (board[y] !== 0) return y;
+
+  const isBitBoard = Number.isInteger(board[0]);
+  let minY = ROWS;
+
+  for (let x = 0; x < COLS; x++) {
+    for (let y = 0; y < ROWS; y++) {
+      const row = board[y];
+      if (row === undefined) break;
+
+      const isSolid = isBitBoard
+        ? ((row & (1 << x)) !== 0)
+        : (Array.isArray(row) && row[x] !== EMPTY && row[x] !== undefined && row[x] !== null);
+
+      if (isSolid) {
+        if (y < minY) minY = y;
+        break;
+      }
+    }
   }
-  return ROWS;
+
+  return minY;
 }
 
 function computeStateMetrics(topology, board) {
