@@ -240,29 +240,34 @@ function analyzeTopology(board) {
   return { openRV, closedRVs };
 }
 
-function computeSolidMinY(board) {
-  if (!board || typeof board.length !== 'number') return ROWS;
+function computeQuadraticHeight(board) {
+  if (!board || typeof board.length !== 'number') return 0;
 
   const isBitBoard = Number.isInteger(board[0]);
-  let minY = ROWS;
+  let totalQuadraticHeight = 0;
 
   for (let x = 0; x < COLS; x++) {
+    let colY = ROWS;
+
     for (let y = 0; y < ROWS; y++) {
       const row = board[y];
-      if (row === undefined) break;
+      if (row === undefined) break; // Fast-Fail defensivo
 
       const isSolid = isBitBoard
         ? ((row & (1 << x)) !== 0)
-        : (Array.isArray(row) && row[x] !== EMPTY && row[x] !== undefined && row[x] !== null);
+        : (Array.isArray(row) && row[x] !== EMPTY);
 
       if (isSolid) {
-        if (y < minY) minY = y;
+        colY = y;
         break;
       }
     }
+
+    const height = ROWS - colY;
+    totalQuadraticHeight += (height * height);
   }
 
-  return minY;
+  return totalQuadraticHeight;
 }
 
 function computeStateMetrics(topology, board) {
@@ -275,7 +280,7 @@ function computeStateMetrics(topology, board) {
         openMinY: ROWS,
         rugosidad: 0
       },
-      solidMinY: ROWS
+      quadraticHeight: computeQuadraticHeight(board)
     };
   }
 
@@ -309,7 +314,7 @@ function computeStateMetrics(topology, board) {
       openMinY: openRV.minY,
       rugosidad
     },
-    solidMinY: computeSolidMinY(board)
+    quadraticHeight: computeQuadraticHeight(board)
   };
 }
 
@@ -317,7 +322,6 @@ function planBestSequence(board, bagTypeIds) {
   // CONFIGURACIÓN
   const BEAM_WIDTH = 25; 
   const HEIGHT_WEIGHT = 1.0;
-  const HEIGHT_EXPONENT = 2;
   const RUGOSIDAD_WEIGHT = 0.4;
   const CLOSED_WEIGHT = 3.0;
   const OPEN_WEIGHT = 0.05;
@@ -345,18 +349,12 @@ function planBestSequence(board, bagTypeIds) {
     A_open: A0,
     rugosidad: metrics0?.geometric?.rugosidad ?? 0,
     A_closed: metrics0?.A_closed_total ?? 0,
-    solidMinY: metrics0?.solidMinY ?? ROWS,
+    quadraticHeight: metrics0?.quadraticHeight ?? 0,
     openMinY: metrics0?.geometric?.openMinY ?? ROWS
   }];
 
-  const heightPenalty = (solidMinY) => {
-    const heightDebt = ROWS - solidMinY;
-    if (heightDebt <= 0) return 0;
-    return Math.pow(heightDebt, HEIGHT_EXPONENT);
-  };
-
   const evaluateScore = (candidate) => {
-    const heightCost = heightPenalty(candidate.solidMinY) * HEIGHT_WEIGHT;
+    const heightCost = candidate.quadraticHeight * HEIGHT_WEIGHT;
     const rugoCost = candidate.rugosidad * RUGOSIDAD_WEIGHT;
     const closedCost = candidate.A_closed * CLOSED_WEIGHT;
     const openRelief = candidate.A_open * OPEN_WEIGHT;
@@ -389,7 +387,7 @@ function planBestSequence(board, bagTypeIds) {
           A_open: metrics.A_open,
           rugosidad: metrics.geometric.rugosidad,
           A_closed: metrics.A_closed_total,
-          solidMinY: metrics.solidMinY,
+          quadraticHeight: metrics.quadraticHeight,
           openMinY: metrics.geometric.openMinY
         });
       }
@@ -403,7 +401,7 @@ function planBestSequence(board, bagTypeIds) {
       const scoreB = evaluateScore(b);
 
       if (scoreA !== scoreB) return scoreA - scoreB;
-      if (a.solidMinY !== b.solidMinY) return b.solidMinY - a.solidMinY;
+      if (a.quadraticHeight !== b.quadraticHeight) return a.quadraticHeight - b.quadraticHeight;
       if (a.rugosidad !== b.rugosidad) return a.rugosidad - b.rugosidad;
       if (a.A_closed !== b.A_closed) return a.A_closed - b.A_closed;
       return b.A_open - a.A_open;
