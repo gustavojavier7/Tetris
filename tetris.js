@@ -186,7 +186,6 @@ class TetrisGame {
     this.botActionQueue = [];
     this.botActionTimer = 0;
     this.botMode = null;
-    this.BOT_ACTION_INTERVAL = 50; // milisegundos entre acciones cinemáticas
 
     this.score = 0;
     this.lines = 0;
@@ -200,6 +199,7 @@ class TetrisGame {
     this.DAS_DELAY = 267;
     this.ARR_DELAY = 100;
     this.ARE_DELAY = 167;
+    this.BOT_ACTION_INTERVAL = this.ARR_DELAY; // milisegundos entre acciones cinemáticas
 
     // Estado de teclas y temporizadores
     this.keys = { left: false, right: false, down: false };
