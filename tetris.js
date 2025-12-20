@@ -730,9 +730,7 @@ class TetrisGame {
     actions.push('DROP');
 
     this.botPlan = {
-      pieceId: this.current.typeId,
-      targetX: this.ghost.x,
-      targetRotation: this.ghost.rotation
+      pieceId: this.current.typeId
     };
 
     this.botActionQueue = actions;
@@ -762,7 +760,6 @@ class TetrisGame {
         this.dasTimer = 0;
       }
     }
-    this.botPlan.holdDirection = dir;
   }
 
   applyBotControl(deltaTime = 0) {
@@ -783,11 +780,11 @@ class TetrisGame {
       return;
     }
 
-    if (!this.botPlan && this.botActionQueue.length === 0) {
+    if (this.botActionQueue.length === 0) {
       this.prepareBotPlanFromGhost();
     }
 
-    if (!this.botPlan || this.botActionQueue.length === 0) return;
+    if (this.botActionQueue.length === 0) return;
 
     this.botActionTimer += deltaTime;
     if (this.botActionTimer < this.BOT_ACTION_INTERVAL) return;
@@ -810,9 +807,7 @@ class TetrisGame {
     switch (action) {
       case 'ROTATE': {
         if (typeof this.mayRotate === 'function' && !this.mayRotate()) return false;
-        const prevRotation = this.current.rotation;
-        this.rotate();
-        return this.current && this.current.rotation !== prevRotation;
+        return this.attemptBotRotateWithWallKick();
       }
       case 'MOVE_LEFT':
       case 'MOVE_RIGHT': {
@@ -885,6 +880,27 @@ class TetrisGame {
       this.current.matrix = nextMatrix;
       this.render();
     }
+  }
+
+  attemptBotRotateWithWallKick() {
+    if (!this.current || this.areTimer > 0) return false;
+
+    const nextRotation = (this.current.rotation + 1) % this.current.shapes.length;
+    const nextMatrix = this.current.shapes[nextRotation];
+    const offsets = [0, 1, -1, 2, -2];
+
+    for (const offset of offsets) {
+      const candidateX = this.current.x + offset;
+      if (!this.collides(nextMatrix, candidateX, this.current.y)) {
+        this.current.x = candidateX;
+        this.current.rotation = nextRotation;
+        this.current.matrix = nextMatrix;
+        this.render();
+        return true;
+      }
+    }
+
+    return false;
   }
 
   hardDrop() {
@@ -984,6 +1000,7 @@ class TetrisGame {
     this.botPlan = null;
     this.botActionQueue = [];
     this.botActionTimer = 0;
+    this.renderNext();
 
     // 3. Generar nueva oportunidad
     this.current = null;
