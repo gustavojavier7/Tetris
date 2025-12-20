@@ -198,7 +198,7 @@ class TetrisGame {
     // SISTEMA DE CONTROL NES (Tiempos en milisegundos)
     this.DAS_DELAY = 267;
     this.ARR_DELAY = 100;
-    this.ARE_DELAY = 167;
+    this.ARE_DELAY = 0;
     this.BOT_ACTION_INTERVAL = this.ARR_DELAY; // milisegundos entre acciones cinemáticas
 
     // Estado de teclas y temporizadores
@@ -864,6 +864,14 @@ class TetrisGame {
 
   handleGravity(deltaTime) {
     if (!this.current || this.areTimer > 0) return;
+
+    const botIsSoftDropping =
+      this.iaAssist &&
+      this.botActionQueue &&
+      this.botActionQueue.length > 0 &&
+      this.botActionQueue[0] === 'SOFT_DROP';
+
+    if (botIsSoftDropping) return;
 
     const gravitySpeed = Math.max(50, 1000 - (this.level * 50));
     const currentSpeed = this.keys.down ? Math.min(50, gravitySpeed / 10) : gravitySpeed;
