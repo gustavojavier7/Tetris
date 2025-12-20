@@ -19,7 +19,17 @@ const PIECE_MASKS = buildPieceMasks(TETROMINOS);
 
 class BoardAnalyzer {
   static validate(board) {
-    return Array.isArray(board) && board.length === ROWS && board.every(r => Array.isArray(r) && r.length === COLS);
+    const isIterable = (Array.isArray(board) || ArrayBuffer.isView(board)) && board.length === ROWS;
+    if (!isIterable) return false;
+
+    const firstRow = board[0];
+    const isMatrix = Array.isArray(firstRow);
+
+    if (isMatrix) {
+      return board.every((r) => Array.isArray(r) && r.length === COLS);
+    }
+
+    return board.every((cell) => Number.isInteger(cell));
   }
 }
 
@@ -230,16 +240,25 @@ function analyzeTopology(board) {
   return { openRV, closedRVs };
 }
 
-function computeStateMetrics(topology) {
+function computeSolidMinY(board) {
+  if (!board || typeof board.length !== 'number') return ROWS;
+  for (let y = 0; y < ROWS; y++) {
+    if (board[y] !== 0) return y;
+  }
+  return ROWS;
+}
+
+function computeStateMetrics(topology, board) {
   if (!topology || !topology.openRV) {
     return {
       A_open: 0,
       A_closed_total: 0,
       closed_count: 0,
       geometric: {
-        minY: ROWS,
+        openMinY: ROWS,
         rugosidad: 0
-      }
+      },
+      solidMinY: ROWS
     };
   }
 
@@ -270,20 +289,27 @@ function computeStateMetrics(topology) {
     A_closed_total,
     closed_count,
     geometric: {
-      minY: openRV.minY,
+      openMinY: openRV.minY,
       rugosidad
-    }
+    },
+    solidMinY: computeSolidMinY(board)
   };
 }
 
 function planBestSequence(board, bagTypeIds) {
   // CONFIGURACIÓN
   const BEAM_WIDTH = 25; 
-  const SAFE_ZONE_LIMIT = 10; // Si hay menos de 10 líneas de aire, entra en PÁNICO.
+  const HEIGHT_WEIGHT = 1.0;
+  const HEIGHT_EXPONENT = 2;
+  const RUGOSIDAD_WEIGHT = 0.4;
+  const CLOSED_WEIGHT = 3.0;
+  const OPEN_WEIGHT = 0.05;
 
   if (!BoardAnalyzer.validate(board)) {
     return { deltaAopen: 0, finalRugosidad: 0, path: [] };
   }
+
+  const baseBoard = Array.isArray(board?.[0]) ? toBitBoard(board) : board;
 
   const sequence = Array.isArray(bagTypeIds)
     ? bagTypeIds.filter((id) => id !== null && id !== undefined)
@@ -291,19 +317,34 @@ function planBestSequence(board, bagTypeIds) {
 
   if (sequence.length === 0) return { path: [] };
 
-  const topology0 = analyzeTopology(board);
-  const metrics0 = computeStateMetrics(topology0);
+  const topology0 = analyzeTopology(baseBoard);
+  const metrics0 = computeStateMetrics(topology0, baseBoard);
   const A0 = metrics0?.A_open ?? 0;
 
   // Estado inicial
   let candidates = [{
-    board: board,
+    board: baseBoard,
     path: [],
     A_open: A0,
     rugosidad: metrics0?.geometric?.rugosidad ?? 0,
     A_closed: metrics0?.A_closed_total ?? 0,
-    minY: metrics0?.geometric?.minY ?? ROWS // Distancia al techo (Mayor es mejor/más bajo)
+    solidMinY: metrics0?.solidMinY ?? ROWS,
+    openMinY: metrics0?.geometric?.openMinY ?? ROWS
   }];
+
+  const heightPenalty = (solidMinY) => {
+    const heightDebt = ROWS - solidMinY;
+    if (heightDebt <= 0) return 0;
+    return Math.pow(heightDebt, HEIGHT_EXPONENT);
+  };
+
+  const evaluateScore = (candidate) => {
+    const heightCost = heightPenalty(candidate.solidMinY) * HEIGHT_WEIGHT;
+    const rugoCost = candidate.rugosidad * RUGOSIDAD_WEIGHT;
+    const closedCost = candidate.A_closed * CLOSED_WEIGHT;
+    const openRelief = candidate.A_open * OPEN_WEIGHT;
+    return heightCost + rugoCost + closedCost - openRelief;
+  };
 
   // Bucle de planificación
   for (let i = 0; i < sequence.length; i++) {
@@ -318,12 +359,12 @@ function planBestSequence(board, bagTypeIds) {
         const nextBoard = simulatePlacementAndClearLines(candidate.board, placement);
         if (!nextBoard) continue;
 
-        const h = hashBoard(nextBoard);
+        const h = hashBitBoard(nextBoard);
         if (visitedHashes.has(h)) continue;
         visitedHashes.add(h);
 
         const topology = analyzeTopology(nextBoard);
-        const metrics = computeStateMetrics(topology);
+        const metrics = computeStateMetrics(topology, nextBoard);
         
         nextCandidates.push({
           board: nextBoard,
@@ -331,7 +372,8 @@ function planBestSequence(board, bagTypeIds) {
           A_open: metrics.A_open,
           rugosidad: metrics.geometric.rugosidad,
           A_closed: metrics.A_closed_total,
-          minY: metrics.geometric.minY
+          solidMinY: metrics.solidMinY,
+          openMinY: metrics.geometric.openMinY
         });
       }
     }
@@ -340,29 +382,13 @@ function planBestSequence(board, bagTypeIds) {
 
     // --- LÓGICA DE PRIORIDADES HÍBRIDA ---
     nextCandidates.sort((a, b) => {
-      // 1. REGLA DE SUPERVIVENCIA (Safety Override)
-      // Si cualquiera de los dos está en zona de peligro (muy alto), la prioridad #1 es la altura.
-      const aDanger = a.minY < SAFE_ZONE_LIMIT;
-      const bDanger = b.minY < SAFE_ZONE_LIMIT;
+      const scoreA = evaluateScore(a);
+      const scoreB = evaluateScore(b);
 
-      if (aDanger || bDanger) {
-        // Si uno está a salvo y el otro no, gana el salvo.
-        if (aDanger !== bDanger) return aDanger ? 1 : -1; 
-        // Si ambos están en peligro, gana el que esté más lejos del techo (Mayor minY).
-        if (a.minY !== b.minY) return b.minY - a.minY;
-      }
-
-      // 2. REGLA DE ESTILO (Zona Segura)
-      // Si estamos a salvo, aplicamos tu lógica de "Arquitecto Plano".
-      
-      // Prioridad A: Menos Rugosidad (Planitud)
+      if (scoreA !== scoreB) return scoreA - scoreB;
+      if (a.solidMinY !== b.solidMinY) return b.solidMinY - a.solidMinY;
       if (a.rugosidad !== b.rugosidad) return a.rugosidad - b.rugosidad;
-      
-      // Prioridad B: Integridad Estructural (Evitar agujeros cerrados)
-      // (Subí esto sobre A_open porque los huecos suelen causar desastres a largo plazo)
       if (a.A_closed !== b.A_closed) return a.A_closed - b.A_closed;
-
-      // Prioridad C: Maximizar Aire (A_open)
       return b.A_open - a.A_open;
     });
 
