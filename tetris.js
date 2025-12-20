@@ -200,6 +200,8 @@ class TetrisGame {
     this.ARR_DELAY = 100;
     this.ARE_DELAY = 0;
     this.BOT_ACTION_INTERVAL = 80
+    // NUEVO: Velocidad fija de caída forzada (cuanto menor número, más rápido)
+    this.SOFT_DROP_DELAY = 60;
 
     // Estado de teclas y temporizadores
     this.keys = { left: false, right: false, down: false };
@@ -874,7 +876,16 @@ class TetrisGame {
     if (botIsSoftDropping) return;
 
     const gravitySpeed = Math.max(50, 1000 - (this.level * 50));
-    const currentSpeed = this.keys.down ? Math.min(50, gravitySpeed / 10) : gravitySpeed;
+    
+    // --- CAMBIO AQUÍ ---
+    // Si se presiona abajo, usamos SOFT_DROP_DELAY.
+    // Usamos Math.min para asegurar que el Soft Drop nunca sea 
+    // más lento que la gravedad natural (en niveles muy altos).
+    const currentSpeed = this.keys.down 
+        ? Math.min(this.SOFT_DROP_DELAY, gravitySpeed) 
+        : gravitySpeed;
+    // -------------------
+
     this.fallAccumulator += deltaTime;
     while (this.fallAccumulator >= currentSpeed) {
       this.applyGravity();
