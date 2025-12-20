@@ -183,8 +183,10 @@ class TetrisGame {
     this.botPlan = null;
     this.pendingBotRequestId = null;
     this.isBotThinking = false;
+    this.botActionQueue = [];
     this.botActionTimer = 0;
     this.botMode = null;
+    this.BOT_ACTION_INTERVAL = 50; // milisegundos entre acciones cinemáticas
 
     this.score = 0;
     this.lines = 0;
@@ -261,6 +263,8 @@ class TetrisGame {
     this.dasTimer = 0;
     this.fallAccumulator = 0;
     this.botPlan = null;
+    this.botActionQueue = [];
+    this.botActionTimer = 0;
 
     this.current.x = Math.floor(COLS / 2) - Math.floor(this.current.shapes[0][0].length / 2);
     this.current.y = 0;
@@ -316,6 +320,7 @@ class TetrisGame {
       this.isBotThinking = false;
       this.ghost = null;
       this.botPlan = null;
+      this.botActionQueue = [];
       this.botMode = null;
       if (this.iaAssist) {
         this.requestBotMove();
@@ -549,10 +554,13 @@ class TetrisGame {
 
     if (this.iaAssist) {
       this.ghost = ghost;
-      this.prepareBotPlanFromGhost();
+      if (!this.botActionQueue.length) {
+        this.prepareBotPlanFromGhost();
+      }
     } else {
       this.ghost = null;
       this.botPlan = null;
+      this.botActionQueue = [];
     }
 
     this.updateIndicator();
@@ -691,28 +699,43 @@ class TetrisGame {
   }
 
   prepareBotPlanFromGhost() {
+    this.botPlan = null;
+    this.botActionQueue = [];
+    this.botActionTimer = 0;
+
     if (!this.iaAssist || !this.current || !this.ghost) {
-      this.botPlan = null;
       return;
     }
 
     if (this.current.typeId !== this.ghost.typeId) {
       console.warn('[AGENT][botPlan] Fast-Fail: el ghost no coincide con la pieza activa.');
-      this.botPlan = null;
       return;
     }
 
     const rotationsNeeded = (this.ghost.rotation - this.current.rotation + this.current.shapes.length) % this.current.shapes.length;
 
+    const actions = [];
+    for (let i = 0; i < rotationsNeeded; i++) {
+      actions.push('ROTATE');
+    }
+
+    const deltaX = this.ghost.x - this.current.x;
+    if (deltaX !== 0) {
+      const horizontalAction = deltaX > 0 ? 'MOVE_RIGHT' : 'MOVE_LEFT';
+      for (let i = 0; i < Math.abs(deltaX); i++) {
+        actions.push(horizontalAction);
+      }
+    }
+
+    actions.push('DROP');
+
     this.botPlan = {
       pieceId: this.current.typeId,
       targetX: this.ghost.x,
-      targetRotation: this.ghost.rotation,
-      rotationsRemaining: rotationsNeeded,
-      holdDirection: null,
-      dropQueued: false
+      targetRotation: this.ghost.rotation
     };
 
+    this.botActionQueue = actions;
     this.releaseHorizontalKeys();
   }
 
@@ -745,67 +768,69 @@ class TetrisGame {
   applyBotControl(deltaTime = 0) {
     // 1. Validaciones básicas de seguridad
     if (!this.iaAssist || !this.current || this.areTimer > 0) return;
+
     if (!this.ghost) {
       this.botPlan = null;
+      this.botActionQueue = [];
       return;
     }
 
-    // 2. Recalcular plan si la situación cambió (ej. pieza nueva o movimiento manual)
-    if (!this.botPlan ||
-        this.botPlan.pieceId !== this.current.typeId ||
-        this.botPlan.targetX !== this.ghost.x ||
-        this.botPlan.targetRotation !== this.ghost.rotation) {
-      this.prepareBotPlanFromGhost();
-      this.botActionTimer = 0; // Resetear timer al tener nuevo plan
+    if (this.botPlan && this.botPlan.pieceId !== this.current.typeId) {
+      console.warn('[AGENT][botPlan] Fast-Fail: la pieza activa cambió antes de terminar la animación.');
+      this.botPlan = null;
+      this.botActionQueue = [];
+      this.releaseHorizontalKeys();
+      return;
     }
 
-    if (!this.botPlan) return;
+    if (!this.botPlan && this.botActionQueue.length === 0) {
+      this.prepareBotPlanFromGhost();
+    }
 
-    // 3. SECCIÓN DE ROTACIÓN CON RETARDO (66 ms / 15 Hz)
-    if (this.botPlan.rotationsRemaining > 0) {
-      this.botActionTimer += deltaTime; // Acumular milisegundos del frame
+    if (!this.botPlan || this.botActionQueue.length === 0) return;
 
-      // Umbral ajustado a 66ms (aprox 15 pulsaciones por segundo)
-      if (this.botActionTimer >= 66) {
+    this.botActionTimer += deltaTime;
+    if (this.botActionTimer < this.BOT_ACTION_INTERVAL) return;
+    this.botActionTimer = 0;
+
+    const action = this.botActionQueue.shift();
+    const success = this.executeBotAction(action);
+
+    if (!success) {
+      console.warn('[AGENT][botPlan] Fast-Fail: acción bloqueada, abortando secuencia.');
+      this.botPlan = null;
+      this.botActionQueue = [];
+      this.releaseHorizontalKeys();
+    }
+  }
+
+  executeBotAction(action) {
+    if (!this.current || this.areTimer > 0) return false;
+
+    switch (action) {
+      case 'ROTATE': {
+        if (typeof this.mayRotate === 'function' && !this.mayRotate()) return false;
         const prevRotation = this.current.rotation;
         this.rotate();
-
-        if (this.current && this.current.rotation !== prevRotation) {
-          // Éxito: descontar una rotación pendiente
-          this.botPlan.rotationsRemaining -= 1;
-          this.botActionTimer = 0; // Reiniciar cuenta para la siguiente pulsación
+        return this.current && this.current.rotation !== prevRotation;
+      }
+      case 'MOVE_LEFT':
+      case 'MOVE_RIGHT': {
+        const dir = action === 'MOVE_LEFT' ? -1 : 1;
+        const prevX = this.current.x;
+        this.move(dir);
+        return this.current && this.current.x !== prevX;
+      }
+      case 'DROP': {
+        if (typeof this.forceMoveDown === 'function') {
+          this.forceMoveDown();
         } else {
-          // Fallo (muro/piso): Abortar para evitar bucle infinito
-          console.warn('[AGENT] Rotación bloqueada, abortando plan.');
-          this.botPlan = null;
-          this.releaseHorizontalKeys();
+          this.hardDrop();
         }
+        return true;
       }
-      // IMPORTANTE: Retornamos aquí para que el bot no se mueva
-      // horizontalmente mientras está ocupado rotando.
-      return;
-    }
-
-    // 4. Movimiento Horizontal (Sin retardo artificial, usa DAS/ARR del juego)
-    const deltaX = this.botPlan.targetX - this.current.x;
-    if (deltaX !== 0) {
-      const dir = deltaX < 0 ? -1 : 1;
-      // Solo presionamos si no estamos ya yendo en esa dirección
-      if (this.botPlan.holdDirection !== dir) {
-        this.applyBotHorizontalHold(dir);
-      }
-      return;
-    }
-
-    // 5. Finalizar: Soltar teclas y Hard Drop
-    if (this.botPlan.holdDirection !== null) {
-      this.releaseHorizontalKeys();
-      this.botPlan.holdDirection = null;
-    }
-
-    if (!this.botPlan.dropQueued) {
-      this.botPlan.dropQueued = true;
-      this.hardDrop();
+      default:
+        return false;
     }
   }
 
@@ -957,6 +982,8 @@ class TetrisGame {
     }
     this.ghost = null;
     this.botPlan = null;
+    this.botActionQueue = [];
+    this.botActionTimer = 0;
 
     // 3. Generar nueva oportunidad
     this.current = null;
