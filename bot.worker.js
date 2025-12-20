@@ -81,7 +81,7 @@ function analyzeTopology(board) {
   const stackY = new Int16Array(ROWS * COLS);
 
   const bottomProfile = new Int16Array(COLS);
-  bottomProfile.fill(-1);
+  bottomProfile.fill(-1); // -1 indica que no hay aire detectado aún
 
   let openArea = 0;
   let openMinY = ROWS;
@@ -104,7 +104,7 @@ function analyzeTopology(board) {
 
     openArea++;
     if (y < openMinY) openMinY = y;
-    if (y > bottomProfile[x]) bottomProfile[x] = y;
+    if (y > bottomProfile[x]) bottomProfile[x] = y; // Guarda la Y más profunda del aire
 
     // Derecha
     if (x + 1 < COLS) {
@@ -162,8 +162,9 @@ function analyzeTopology(board) {
     bottomProfile
   };
 
-  // --- 2. Flood fill de RV cerradas ---
+  // --- 2. Flood fill de RV cerradas CON CÁLCULO DE SEPULTURA ---
   const closedRVs = [];
+  let totalBurial = 0;
 
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
@@ -171,6 +172,7 @@ function analyzeTopology(board) {
       if ((board[y] & (1 << x)) !== 0 || visited[idx]) continue;
 
       let area = 0;
+      let currentBurial = 0;
       stackSize = 0;
       stackX[stackSize] = x;
       stackY[stackSize] = y;
@@ -182,6 +184,10 @@ function analyzeTopology(board) {
         const cx = stackX[stackSize];
         const cy = stackY[stackSize];
         area++;
+
+        const surfaceY = openRV.bottomProfile[cx];
+        const depth = (surfaceY === -1) ? cy : (cy - surfaceY);
+        currentBurial += Math.max(0, depth);
 
         // Derecha
         if (cx + 1 < COLS) {
@@ -234,10 +240,11 @@ function analyzeTopology(board) {
       }
 
       closedRVs.push({ area });
+      totalBurial += currentBurial;
     }
   }
 
-  return { openRV, closedRVs };
+  return { openRV, closedRVs, totalBurial };
 }
 
 function computeQuadraticHeight(board) {
@@ -280,11 +287,12 @@ function computeStateMetrics(topology, board) {
         openMinY: ROWS,
         rugosidad: 0
       },
-      quadraticHeight: computeQuadraticHeight(board)
+      quadraticHeight: computeQuadraticHeight(board),
+      burialScore: 0
     };
   }
 
-  const { openRV, closedRVs } = topology;
+  const { openRV, closedRVs, totalBurial } = topology;
 
   // --- Métricas topológicas básicas ---
   const A_open = openRV.area;
@@ -314,7 +322,8 @@ function computeStateMetrics(topology, board) {
       openMinY: openRV.minY,
       rugosidad
     },
-    quadraticHeight: computeQuadraticHeight(board)
+    quadraticHeight: computeQuadraticHeight(board),
+    burialScore: totalBurial
   };
 }
 
@@ -323,7 +332,8 @@ function planBestSequence(board, bagTypeIds) {
   const BEAM_WIDTH = 25; 
   const HEIGHT_WEIGHT = 1.0;
   const RUGOSIDAD_WEIGHT = 0.4;
-  const CLOSED_WEIGHT = 3.0;
+  const CLOSED_WEIGHT = 2.0;
+  const BURIAL_WEIGHT = 0.5;
   const OPEN_WEIGHT = 0.05;
 
   if (!BoardAnalyzer.validate(board)) {
@@ -350,15 +360,17 @@ function planBestSequence(board, bagTypeIds) {
     rugosidad: metrics0?.geometric?.rugosidad ?? 0,
     A_closed: metrics0?.A_closed_total ?? 0,
     quadraticHeight: metrics0?.quadraticHeight ?? 0,
-    openMinY: metrics0?.geometric?.openMinY ?? ROWS
+    openMinY: metrics0?.geometric?.openMinY ?? ROWS,
+    burialScore: metrics0?.burialScore ?? 0
   }];
 
   const evaluateScore = (candidate) => {
     const heightCost = candidate.quadraticHeight * HEIGHT_WEIGHT;
     const rugoCost = candidate.rugosidad * RUGOSIDAD_WEIGHT;
     const closedCost = candidate.A_closed * CLOSED_WEIGHT;
+    const burialCost = candidate.burialScore * BURIAL_WEIGHT;
     const openRelief = candidate.A_open * OPEN_WEIGHT;
-    return heightCost + rugoCost + closedCost - openRelief;
+    return heightCost + rugoCost + closedCost + burialCost - openRelief;
   };
 
   // Bucle de planificación
@@ -388,7 +400,8 @@ function planBestSequence(board, bagTypeIds) {
           rugosidad: metrics.geometric.rugosidad,
           A_closed: metrics.A_closed_total,
           quadraticHeight: metrics.quadraticHeight,
-          openMinY: metrics.geometric.openMinY
+          openMinY: metrics.geometric.openMinY,
+          burialScore: metrics.burialScore
         });
       }
     }
