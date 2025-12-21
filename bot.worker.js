@@ -330,7 +330,7 @@ function computeStateMetrics(topology, board) {
 function planBestSequence(board, bagTypeIds) {
   // CONFIGURACIÓN
   const BEAM_WIDTH = 25; 
-  const HEIGHT_WEIGHT = 0.3;
+  const HEIGHT_WEIGHT = 1.3;
   const RUGOSIDAD_WEIGHT = 0.8;
   const CLOSED_WEIGHT = 2.0;
   const BURIAL_WEIGHT = 0.1;
