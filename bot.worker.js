@@ -187,7 +187,7 @@ function analyzeTopology(board) {
 
         const surfaceY = openRV.bottomProfile[cx];
         const depth = (surfaceY === -1) ? cy : (cy - surfaceY);
-        currentBurial += Math.max(0, depth * depth);
+        currentBurial += Math.max(0, depth);
 
         // Derecha
         if (cx + 1 < COLS) {
@@ -328,12 +328,21 @@ function computeStateMetrics(topology, board) {
 }
 
 function planBestSequence(board, bagTypeIds) {
-  // CONFIGURACIÓN
-  const BEAM_WIDTH = 25; 
-  const HEIGHT_WEIGHT = 1.3;
-  const RUGOSIDAD_WEIGHT = 0.8;
+  // CONFIGURACIÓN (Reversión a modelo lineal)
+  const BEAM_WIDTH = 25;
+
+  // 1. ALTURA DOMINANTE
+  const HEIGHT_WEIGHT = 1.0;
+
+  // 2. RUGOSIDAD BALANCEADA
+  const RUGOSIDAD_WEIGHT = 0.4;
+
+  // 3. IMPUESTO A HUECOS
   const CLOSED_WEIGHT = 2.0;
-  const BURIAL_WEIGHT = 0.1;
+
+  // 4. SEPULTURA LINEAL
+  const BURIAL_WEIGHT = 0.5;
+
   const OPEN_WEIGHT = 0.05;
 
   if (!BoardAnalyzer.validate(board)) {
