@@ -327,9 +327,130 @@ function computeStateMetrics(topology, board) {
   };
 }
 
+// --- ESTRATEGIA DEFAULT ---
+const DEFAULT_STRATEGY = {
+  // Configuración de búsqueda
+  BEAM_WIDTH: 25,
+
+  // Pesos del modelo lineal
+  weights: {
+    height: 1.0,      // 1. ALTURA DOMINANTE
+    rugosidad: 0.4,   // 2. RUGOSIDAD BALANCEADA
+    closed: 2.0,      // 3. IMPUESTO A HUECOS
+    burial: 0.5,      // 4. SEPULTURA LINEAL
+    open: 0.05        // Bonificación por área abierta
+  },
+
+  // Función de evaluación (Score: menor es mejor)
+  evaluate: function(candidate) {
+    const w = this.weights;
+    const heightCost = candidate.quadraticHeight * w.height;
+    const rugoCost = candidate.rugosidad * w.rugosidad;
+    const closedCost = candidate.A_closed * w.closed;
+    const burialCost = candidate.burialScore * w.burial;
+    const openRelief = candidate.A_open * w.open;
+    
+    return heightCost + rugoCost + closedCost + burialCost - openRelief;
+  }
+};
+
 function planBestSequence(board, bagTypeIds) {
-  // CONFIGURACIÓN (Reversión a modelo lineal)
-  const BEAM_WIDTH = 25;
+  // 1. Cargar configuración de la estrategia aislada
+  const strategy = DEFAULT_STRATEGY;
+  const BEAM_WIDTH = strategy.BEAM_WIDTH;
+
+  if (!BoardAnalyzer.validate(board)) {
+    return { deltaAopen: 0, finalRugosidad: 0, path: [] };
+  }
+
+  const baseBoard = Array.isArray(board?.[0]) ? toBitBoard(board) : board;
+
+  const sequence = Array.isArray(bagTypeIds)
+    ? bagTypeIds.filter((id) => id !== null && id !== undefined)
+    : [];
+
+  if (sequence.length === 0) return { path: [] };
+
+  const topology0 = analyzeTopology(baseBoard);
+  const metrics0 = computeStateMetrics(topology0, baseBoard);
+  const A0 = metrics0?.A_open ?? 0;
+
+  // Estado inicial
+  let candidates = [{
+    board: baseBoard,
+    path: [],
+    A_open: A0,
+    rugosidad: metrics0?.geometric?.rugosidad ?? 0,
+    A_closed: metrics0?.A_closed_total ?? 0,
+    quadraticHeight: metrics0?.quadraticHeight ?? 0,
+    openMinY: metrics0?.geometric?.openMinY ?? ROWS,
+    burialScore: metrics0?.burialScore ?? 0
+  }];
+
+  // NOTA: La función local 'evaluateScore' se ha eliminado
+  // Ahora se usa strategy.evaluate(candidate) directamente en el loop.
+
+  // Bucle de planificación
+  for (let i = 0; i < sequence.length; i++) {
+    const currentTypeId = sequence[i];
+    const nextCandidates = [];
+    const visitedHashes = new Set();
+
+    for (const candidate of candidates) {
+      const placements = generatePlacements(candidate.board, currentTypeId);
+
+      for (const placement of placements) {
+        const nextBoard = simulatePlacementAndClearLines(candidate.board, placement);
+        if (!nextBoard) continue;
+
+        const h = hashBitBoard(nextBoard);
+        if (visitedHashes.has(h)) continue;
+        visitedHashes.add(h);
+
+        const topology = analyzeTopology(nextBoard);
+        const metrics = computeStateMetrics(topology, nextBoard);
+        
+        nextCandidates.push({
+          board: nextBoard,
+          path: [...candidate.path, placement],
+          A_open: metrics.A_open,
+          rugosidad: metrics.geometric.rugosidad,
+          A_closed: metrics.A_closed_total,
+          quadraticHeight: metrics.quadraticHeight,
+          openMinY: metrics.geometric.openMinY,
+          burialScore: metrics.burialScore
+        });
+      }
+    }
+
+    if (nextCandidates.length === 0) break;
+
+    // --- LÓGICA DE PRIORIDADES HÍBRIDA ---
+    nextCandidates.sort((a, b) => {
+      // USAMOS LA ESTRATEGIA AISLADA AQUÍ
+      const scoreA = strategy.evaluate(a);
+      const scoreB = strategy.evaluate(b);
+
+      if (scoreA !== scoreB) return scoreA - scoreB;
+      
+      // Desempates (Legacy)
+      if (a.quadraticHeight !== b.quadraticHeight) return a.quadraticHeight - b.quadraticHeight;
+      if (a.rugosidad !== b.rugosidad) return a.rugosidad - b.rugosidad;
+      if (a.A_closed !== b.A_closed) return a.A_closed - b.A_closed;
+      return b.A_open - a.A_open;
+    });
+
+    candidates = nextCandidates.slice(0, BEAM_WIDTH);
+  }
+
+  const best = candidates[0];
+  if (!best) return { path: [] };
+
+  return {
+    path: best.path,
+    deltaAopen: best.A_open - A0
+  };
+}
 
   // 1. ALTURA DOMINANTE
   const HEIGHT_WEIGHT = 1.0;
