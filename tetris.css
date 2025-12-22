@@ -300,7 +300,7 @@ button:active {
         width: 150px;
         height: 120px;
         transform: scale(0.7);
-        transform-origin: top left;
+        transform-origin: top center;
         position: relative;
         display: flex;
         align-items: center;
