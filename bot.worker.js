@@ -356,14 +356,43 @@ const DEFAULT_STRATEGY = {
 };
 
 const STACK_STRATEGY = {
-  BEAM_WIDTH: 30,
+  BEAM_WIDTH: 35,
+  
   weights: {
-    ...DEFAULT_STRATEGY.weights,
-    height: 1.2,
-    open: 0.02,
-    burial: 0.6
+    height: 0.05,     // <--- ¡BAJO! Queremos construir alto
+    rugosidad: 0.3,   // Mantener plano
+    closed: 8.0,      // Odiar huecos
+    burial: 2.0,
+    open: 0.1,
+    well_wall: 0.0    // Ignorar pared del pozo
   },
-  evaluate: DEFAULT_STRATEGY.evaluate
+
+  evaluate: function(candidate) {
+    const w = this.weights;
+    // Fallback si no hay perfil
+    if (!candidate.profile) {
+        return (candidate.quadraticHeight * w.height) +
+               (candidate.rugosidad * w.rugosidad) +
+               (candidate.A_closed * w.closed); 
+    }
+
+    const p = candidate.profile;
+    
+    // CÁLCULO DE RUGOSIDAD SELECTIVA (Ceguera al Pozo en columna 11)
+    let stackRugosidad = 0;
+    // Iteramos solo hasta la anteúltima columna para ignorar el precipicio final
+    for (let x = 0; x < COLS - 2; x++) {
+        if (p[x] !== -1 && p[x+1] !== -1) {
+            stackRugosidad += Math.abs(p[x] - p[x+1]);
+        }
+    }
+
+    return (candidate.quadraticHeight * w.height) +
+           (stackRugosidad * w.rugosidad) +
+           (candidate.A_closed * w.closed) +
+           (candidate.burialScore * w.burial) -
+           (candidate.A_open * w.open);
+  }
 };
 
 function planBestSequence(board, bagTypeIds) {
@@ -383,6 +412,7 @@ function planBestSequence(board, bagTypeIds) {
   const metrics0 = computeStateMetrics(topology0, baseBoard);
   const A0 = metrics0?.A_open ?? 0;
 
+  // Lógica de Trigger
   const isClean = (metrics0?.A_closed_total ?? 0) === 0;
   const hasBaseAccess = Array.isArray(topology0?.openRV?.bottomProfile)
     ? topology0.openRV.bottomProfile.some((depth) => depth === ROWS - 1)
@@ -398,7 +428,6 @@ function planBestSequence(board, bagTypeIds) {
 
   const BEAM_WIDTH = strategy.BEAM_WIDTH;
 
-  // Estado inicial
   let candidates = [{
     board: baseBoard,
     path: [],
@@ -407,13 +436,10 @@ function planBestSequence(board, bagTypeIds) {
     A_closed: metrics0?.A_closed_total ?? 0,
     quadraticHeight: metrics0?.quadraticHeight ?? 0,
     openMinY: metrics0?.geometric?.openMinY ?? ROWS,
-    burialScore: metrics0?.burialScore ?? 0
+    burialScore: metrics0?.burialScore ?? 0,
+    profile: topology0.openRV.bottomProfile // <--- NECESARIO PARA STACK
   }];
 
-  // NOTA: La función local 'evaluateScore' se ha eliminado
-  // Ahora se usa strategy.evaluate(candidate) directamente en el loop.
-
-  // Bucle de planificación
   for (let i = 0; i < sequence.length; i++) {
     const currentTypeId = sequence[i];
     const nextCandidates = [];
@@ -441,26 +467,21 @@ function planBestSequence(board, bagTypeIds) {
           A_closed: metrics.A_closed_total,
           quadraticHeight: metrics.quadraticHeight,
           openMinY: metrics.geometric.openMinY,
-          burialScore: metrics.burialScore
+          burialScore: metrics.burialScore,
+          profile: topology.openRV.bottomProfile // <--- NECESARIO PARA STACK
         });
       }
     }
 
     if (nextCandidates.length === 0) break;
 
-    // --- LÓGICA DE PRIORIDADES HÍBRIDA ---
     nextCandidates.sort((a, b) => {
-      // USAMOS LA ESTRATEGIA AISLADA AQUÍ
       const scoreA = strategy.evaluate(a);
       const scoreB = strategy.evaluate(b);
-
       if (scoreA !== scoreB) return scoreA - scoreB;
-      
-      // Desempates (Legacy)
+      // Desempates
       if (a.quadraticHeight !== b.quadraticHeight) return a.quadraticHeight - b.quadraticHeight;
-      if (a.rugosidad !== b.rugosidad) return a.rugosidad - b.rugosidad;
-      if (a.A_closed !== b.A_closed) return a.A_closed - b.A_closed;
-      return b.A_open - a.A_open;
+      return a.rugosidad - b.rugosidad;
     });
 
     candidates = nextCandidates.slice(0, BEAM_WIDTH);
