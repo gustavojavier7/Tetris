@@ -401,21 +401,23 @@ const STACK_STRATEGY = {
   BEAM_WIDTH: 35,
   
   weights: {
-    height: 0.05,     // <--- ¡BAJO! Queremos construir alto
-    rugosidad: 0.3,   // Mantener plano
-    closed: 8.0,      // Odiar huecos
+    height: 0.05,     // Construir es barato
+    rugosidad: 0.3,
+    closed: 8.0,
     burial: 2.0,
     open: 0.1,
-    well_wall: 0.0,   // Ignorar pared del pozo
-    burn: 5000.0      // SUBIDA DRÁSTICA: De 500 a 5000
+    well_wall: 0.0,
+    burn: 5000.0      // Penalización nuclear por limpiar líneas sueltas
   },
 
   evaluate: function(candidate) {
     const w = this.weights;
     const linesCleared = candidate.linesCleared ?? 0;
+    
+    // Penalización por Quema: Prohibido limpiar 1, 2 o 3 líneas.
     const burnPenalty = (linesCleared > 0 && linesCleared < 4) ? w.burn : 0;
 
-    // Fallback si no hay perfil
+    // Fallback defensivo
     if (!candidate.profile) {
         return (candidate.quadraticHeight * w.height) +
                (candidate.rugosidad * w.rugosidad) +
@@ -425,10 +427,35 @@ const STACK_STRATEGY = {
 
     const p = candidate.profile;
     
-    // CÁLCULO DE RUGOSIDAD SELECTIVA (Ceguera al Pozo en columna 11)
+    // 1. IDENTIFICACIÓN DINÁMICA DE CHIMENEA
+    // Buscamos la columna más profunda (mayor Y) para que sea el pozo.
+    let wellCol = 11; // Default derecha
+    let maxDepth = -99;
+    
+    for (let x = 0; x < COLS; x++) {
+        if (p[x] > maxDepth) {
+            maxDepth = p[x];
+            wellCol = x;
+        } 
+        // Desempate: Preferimos bordes (0 o 11)
+        else if (p[x] === maxDepth) {
+            const wellIsEdge = (wellCol === 0 || wellCol === COLS - 1);
+            const currIsEdge = (x === 0 || x === COLS - 1);
+            
+            if (currIsEdge && !wellIsEdge) {
+                wellCol = x;
+            } else if (x === COLS - 1) {
+                wellCol = x; // Preferencia convencional a la derecha
+            }
+        }
+    }
+
+    // 2. RUGOSIDAD SELECTIVA (Ceguera Dinámica)
     let stackRugosidad = 0;
-    // Iteramos solo hasta la anteúltima columna para ignorar el precipicio final
-    for (let x = 0; x < COLS - 2; x++) {
+    for (let x = 0; x < COLS - 1; x++) {
+        // Si el par actual (x, x+1) involucra al pozo, ignoramos el precipicio.
+        if (x === wellCol || x + 1 === wellCol) continue;
+
         if (p[x] !== -1 && p[x+1] !== -1) {
             stackRugosidad += Math.abs(p[x] - p[x+1]);
         }
@@ -459,7 +486,6 @@ function planBestSequence(board, bagTypeIds) {
   const topology0 = analyzeTopology(baseBoard);
   const metrics0 = computeStateMetrics(topology0, baseBoard);
   const A0 = metrics0?.A_open ?? 0;
-  const towerHeight = computeTowerHeightEstimate(baseBoard, topology0?.openRV?.bottomProfile);
 
   // --- ZONA DE DEBUG ---
   const debugClosed = metrics0?.A_closed_total ?? -999;
@@ -470,22 +496,68 @@ function planBestSequence(board, bagTypeIds) {
   console.log(`[WORKER DEBUG] ClosedArea: ${debugClosed} | Profile: [${debugProfile}]`);
   // --------------------
 
-  // --- LÓGICA DE ACTIVACIÓN DE ESTRATEGIA (SIMPLIFICADA) ---
+  // ---------------------------------------------------------
+  // LÓGICA DE TRIGGER UNIFICADA (v7.6)
+  // ---------------------------------------------------------
 
-  // Condición Única: Integridad Estructural
-  // Si no hay huecos (A_closed_total == 0), el tablero es sólido y seguro para construir.
+  // 1. Integridad Básica
   const isClean = (metrics0?.A_closed_total ?? 0) === 0;
+  
+  // 2. Altura Segura (Margen de maniobra)
+  const currentHeight = ROWS - (metrics0?.geometric?.openMinY ?? ROWS);
+  const isSafeHeight = currentHeight < 16;
 
-  // Límite de Seguridad (Opcional, pero recomendado para no morir por exceso de confianza)
-  // Si la torre supera la altura 16 (quedan 6 líneas), volvemos a Default para bajarla.
-  const isSafeHeight = towerHeight < 16;
+  // 3. Integridad Estructural del Pozo (Wall Check)
+  let wallsIntact = true;
 
+  if (isClean && topology0?.openRV?.bottomProfile) {
+      const p = topology0.openRV.bottomProfile;
+      
+      // A. Replicar lógica de elección de pozo para saber qué revisar
+      let wellCol = 11;
+      let maxDepth = -99;
+      for (let x = 0; x < COLS; x++) {
+          if (p[x] > maxDepth) {
+              maxDepth = p[x];
+              wellCol = x;
+          } else if (p[x] === maxDepth) {
+              const wellIsEdge = (wellCol === 0 || wellCol === COLS - 1);
+              const currIsEdge = (x === 0 || x === COLS - 1);
+              if (currIsEdge && !wellIsEdge) wellCol = x;
+              else if (x === COLS - 1) wellCol = x;
+          }
+      }
+
+      // B. Escanear columnas adyacentes al pozo elegido
+      const checkCols = [];
+      if (wellCol > 0) checkCols.push(wellCol - 1);
+      if (wellCol < COLS - 1) checkCols.push(wellCol + 1);
+
+      for (const cx of checkCols) {
+          // Buscamos "Overhangs": Celdas vacías con algo ocupado encima
+          for (let y = 1; y < ROWS; y++) {
+              const isOccAbove = (baseBoard[y-1] & (1 << cx)) !== 0;
+              const isEmptyCurr = (baseBoard[y] & (1 << cx)) === 0;
+
+              if (isEmptyCurr && isOccAbove) {
+                  wallsIntact = false; 
+                  // console.log(`[TRIGGER] Pared rota en Col ${cx}, Y=${y}. Abortando STACK.`);
+                  break;
+              }
+          }
+          if (!wallsIntact) break;
+      }
+  }
+
+  // --- SELECCIÓN FINAL ---
   let strategy = DEFAULT_STRATEGY;
   let strategyName = 'DEFAULT';
 
-  // ELIMINAMOS 'hasBaseAccess' de la ecuación.
-  // Si está limpio y no nos vamos a chocar con el techo, construimos.
-  if (isClean && isSafeHeight) {
+  // Solo activamos STACK si:
+  // 1. No hay huecos (Clean)
+  // 2. No vamos a chocar con el techo (SafeHeight)
+  // 3. Las paredes del futuro pozo son verticales y sólidas (WallsIntact)
+  if (isClean && isSafeHeight && wallsIntact) {
     strategy = STACK_STRATEGY;
     strategyName = 'STACK';
   }
