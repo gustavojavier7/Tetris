@@ -412,6 +412,15 @@ function planBestSequence(board, bagTypeIds) {
   const metrics0 = computeStateMetrics(topology0, baseBoard);
   const A0 = metrics0?.A_open ?? 0;
 
+  // --- ZONA DE DEBUG ---
+  const debugClosed = metrics0?.A_closed_total ?? -999;
+  const debugProfile = topology0?.openRV?.bottomProfile ? topology0.openRV.bottomProfile.join(',') : 'NULL';
+  
+  // Imprimir solo si es el primer turno (tablero vacío suele tener A_open alto) o condicional
+  // O simplemente imprimir siempre por ahora para ver qué pasa al inicio.
+  console.log(`[WORKER DEBUG] ClosedArea: ${debugClosed} | Profile: [${debugProfile}]`);
+  // --------------------
+
   // Lógica de Trigger
   const isClean = (metrics0?.A_closed_total ?? 0) === 0;
   const hasBaseAccess = Array.isArray(topology0?.openRV?.bottomProfile)
