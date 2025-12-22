@@ -369,11 +369,15 @@ const STACK_STRATEGY = {
 
   evaluate: function(candidate) {
     const w = this.weights;
+    const linesCleared = candidate.linesCleared ?? 0;
+    const burnPenalty = (linesCleared > 0 && linesCleared < 4) ? 500 : 0;
+
     // Fallback si no hay perfil
     if (!candidate.profile) {
         return (candidate.quadraticHeight * w.height) +
                (candidate.rugosidad * w.rugosidad) +
-               (candidate.A_closed * w.closed); 
+               (candidate.A_closed * w.closed) +
+               burnPenalty;
     }
 
     const p = candidate.profile;
@@ -391,7 +395,8 @@ const STACK_STRATEGY = {
            (stackRugosidad * w.rugosidad) +
            (candidate.A_closed * w.closed) +
            (candidate.burialScore * w.burial) -
-           (candidate.A_open * w.open);
+           (candidate.A_open * w.open) +
+           burnPenalty;
   }
 };
 
@@ -447,6 +452,7 @@ function planBestSequence(board, bagTypeIds) {
   let candidates = [{
     board: baseBoard,
     path: [],
+    linesCleared: 0,
     A_open: A0,
     rugosidad: metrics0?.geometric?.rugosidad ?? 0,
     A_closed: metrics0?.A_closed_total ?? 0,
@@ -465,8 +471,10 @@ function planBestSequence(board, bagTypeIds) {
       const placements = generatePlacements(candidate.board, currentTypeId);
 
       for (const placement of placements) {
-        const nextBoard = simulatePlacementAndClearLines(candidate.board, placement);
-        if (!nextBoard) continue;
+        const result = simulatePlacementAndClearLines(candidate.board, placement);
+        if (!result) continue;
+
+        const { board: nextBoard, linesCleared } = result;
 
         const h = hashBitBoard(nextBoard);
         if (visitedHashes.has(h)) continue;
@@ -478,6 +486,7 @@ function planBestSequence(board, bagTypeIds) {
         nextCandidates.push({
           board: nextBoard,
           path: [...candidate.path, placement],
+          linesCleared,
           A_open: metrics.A_open,
           rugosidad: metrics.geometric.rugosidad,
           A_closed: metrics.A_closed_total,
@@ -604,18 +613,22 @@ function simulatePlacementAndClearLines(board, placement) {
   // Limpieza de líneas completas
   const compacted = new Uint16Array(ROWS);
   let writeIndex = ROWS - 1;
+  let linesCleared = 0;
   for (let r = ROWS - 1; r >= 0; r--) {
-    if (newBoard[r] !== FULL_MASK) {
-      compacted[writeIndex] = newBoard[r];
-      writeIndex--;
+    if (newBoard[r] === FULL_MASK) {
+      linesCleared++;
+      continue;
     }
+
+    compacted[writeIndex] = newBoard[r];
+    writeIndex--;
   }
   while (writeIndex >= 0) {
     compacted[writeIndex] = 0;
     writeIndex--;
   }
 
-  return compacted;
+  return { board: compacted, linesCleared };
 }
 
 // --- Utilidades de bitboards y máscaras ---
