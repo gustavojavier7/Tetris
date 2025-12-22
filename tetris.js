@@ -279,6 +279,7 @@ class TetrisGame {
       this.stopTimer();
       const btn = document.getElementById('playBtn');
       if (btn) btn.textContent = '▶ Play';
+      this.showGameOverScreen();
     }
 
     if (this.gameOver) return;
