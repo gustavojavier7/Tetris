@@ -321,15 +321,24 @@ class TetrisGame {
     document.getElementById('iaAssistToggle').onclick = () => {
       this.iaAssist = !this.iaAssist;
       document.getElementById('iaAssistToggle').classList.toggle('active', this.iaAssist);
+      
+      // --- CORRECCIÓN DE LIMPIEZA ---
       this.pendingBotRequestId = null;
       this.isBotThinking = false;
       this.ghost = null;
       this.botPlan = null;
-      this.botActionQueue = [];
+      this.botActionQueue = []; // Limpiar cola para evitar bloqueos
       this.botMode = null;
+      // -----------------------------
+
       if (this.iaAssist) {
-        this.requestBotMove();
+        // Solo pedimos movimiento si el juego NO está en Game Over y tenemos pieza
+        if (!this.gameOver && this.current) {
+            this.requestBotMove();
+        }
       }
+      
+      // ... resto del código (fallAccumulator, timer reset, visuales) ...
       this.fallAccumulator = 0;
       this.dasTimer = 0;
       this.keys = { left: false, right: false, down: false };
