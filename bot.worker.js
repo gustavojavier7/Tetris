@@ -642,12 +642,15 @@ function planBestSequence(board, bagTypeIds) {
   }
 
   const best = candidates[0];
-  if (!best) return { path: [], strategy: strategyName };
 
+  // CORRECCIÓN DE ROBUSTEZ:
+  // Devolvemos la estrategia decidida (strategyName) explícitamente,
+  // desacoplando la "Intención" (Estrategia) de la "Ejecución" (Path).
   return {
-    path: best.path,
-    deltaAopen: best.A_open - A0,
-    strategy: strategyName
+    path: best?.path || [],
+    deltaAopen: (best?.A_open ?? A0) - A0,
+    linesCleared: best?.linesCleared || 0,
+    strategy: strategyName // <--- ¡Siempre enviamos la estrategia calculada al inicio!
   };
 }
 
