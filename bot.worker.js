@@ -503,9 +503,23 @@ function planBestSequence(board, bagTypeIds) {
   // 1. Integridad Básica
   const isClean = (metrics0?.A_closed_total ?? 0) === 0;
   
-  // 2. Altura Segura (Margen de maniobra)
-  const currentHeight = ROWS - (metrics0?.geometric?.openMinY ?? ROWS);
-  const isSafeHeight = currentHeight < 16;
+  // 2. Altura Segura (CORREGIDO)
+  // Usamos el perfil de fondo para ver dónde empieza realmente la tierra.
+  // El perfil tiene la coord Y del aire más profundo. El bloque está en Y+1 (si Y<21).
+  // Pero una forma más segura es escanear el tablero o usar una función auxiliar.
+  
+  // Opción rápida usando el objeto metrics (si tuviera maxSolidY) o recalculando:
+  let highestSolidY = ROWS;
+  for (let y = 0; y < ROWS; y++) {
+    // (baseBoard es Uint16Array, usamos bitmask para verificar si la fila tiene algo)
+    if (baseBoard[y] !== 0) {
+      highestSolidY = y;
+      break;
+    }
+  }
+  
+  const realTowerHeight = ROWS - highestSolidY;
+  const isSafeHeight = realTowerHeight < 16;
 
   // 3. Integridad Estructural del Pozo (Wall Check)
   let wallsIntact = true;
