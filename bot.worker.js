@@ -423,8 +423,11 @@ function planBestSequence(board, bagTypeIds) {
 
   // Lógica de Trigger
   const isClean = (metrics0?.A_closed_total ?? 0) === 0;
-  const hasBaseAccess = Array.isArray(topology0?.openRV?.bottomProfile)
-    ? topology0.openRV.bottomProfile.some((depth) => depth === ROWS - 1)
+
+  // CORRECCIÓN: Usamos verificación simple de existencia, no Array.isArray
+  const profile = topology0?.openRV?.bottomProfile;
+  const hasBaseAccess = profile 
+    ? profile.some((depth) => depth === ROWS - 1)
     : false;
 
   let strategy = DEFAULT_STRATEGY;
