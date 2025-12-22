@@ -277,6 +277,8 @@ class TetrisGame {
       this.gameOver = true;
       this.paused = true;
       this.stopTimer();
+      const btn = document.getElementById('playBtn');
+      if (btn) btn.textContent = '▶ Play';
     }
 
     if (this.gameOver) return;
@@ -1046,10 +1048,14 @@ class TetrisGame {
 
   togglePause() {
     this.paused = !this.paused;
+    const btn = document.getElementById('playBtn'); // Referencia al botón
+
     if (this.paused) {
       this.pauseTimer();
+      if (btn) btn.textContent = '▶ Play'; // Cambio visual a Play
     } else if (!this.gameOver) {
       this.resumeTimer();
+      if (btn) btn.textContent = '⏸ Pause'; // Cambio visual a Pause
     }
   }
 
@@ -1061,6 +1067,8 @@ class TetrisGame {
     this.spawnNewPiece();
     this.gameOver = false;
     this.paused = true;
+    const btn = document.getElementById('playBtn');
+    if (btn) btn.textContent = '▶ Play';
     this.score = 0;
     this.lines = 0;
     this.lastTime = 0;
