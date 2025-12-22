@@ -406,13 +406,14 @@ const STACK_STRATEGY = {
     closed: 8.0,      // Odiar huecos
     burial: 2.0,
     open: 0.1,
-    well_wall: 0.0    // Ignorar pared del pozo
+    well_wall: 0.0,   // Ignorar pared del pozo
+    burn: 5000.0      // SUBIDA DRÁSTICA: De 500 a 5000
   },
 
   evaluate: function(candidate) {
     const w = this.weights;
     const linesCleared = candidate.linesCleared ?? 0;
-    const burnPenalty = (linesCleared > 0 && linesCleared < 4) ? 500 : 0;
+    const burnPenalty = (linesCleared > 0 && linesCleared < 4) ? w.burn : 0;
 
     // Fallback si no hay perfil
     if (!candidate.profile) {
