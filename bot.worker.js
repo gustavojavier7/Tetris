@@ -328,6 +328,48 @@ function computeStateMetrics(topology, board) {
   };
 }
 
+function findHighestOccupiedRow(board) {
+  if (!board || typeof board.length !== 'number') return null;
+
+  const isBitBoard = Number.isInteger(board[0]);
+
+  for (let y = 0; y < ROWS; y++) {
+    const row = board[y];
+    if (row === undefined) break; // Fast-Fail defensivo
+
+    const hasSolid = isBitBoard
+      ? ((row & FULL_MASK) !== 0)
+      : (Array.isArray(row) && row.some((cell) => cell !== EMPTY));
+
+    if (hasSolid) return y;
+  }
+
+  return null;
+}
+
+function computeTowerHeightEstimate(board, bottomProfile) {
+  const highestSolidY = findHighestOccupiedRow(board);
+  if (highestSolidY !== null) {
+    return ROWS - highestSolidY;
+  }
+
+  if (bottomProfile && bottomProfile.length === COLS) {
+    let maxOpenDepth = -1;
+    for (let i = 0; i < bottomProfile.length; i++) {
+      const depth = bottomProfile[i];
+      if (depth > maxOpenDepth) {
+        maxOpenDepth = depth;
+      }
+    }
+
+    if (maxOpenDepth >= 0) {
+      return ROWS - (maxOpenDepth + 1);
+    }
+  }
+
+  return 0;
+}
+
 // --- ESTRATEGIA DEFAULT ---
 const DEFAULT_STRATEGY = {
   // Configuración de búsqueda
@@ -416,6 +458,7 @@ function planBestSequence(board, bagTypeIds) {
   const topology0 = analyzeTopology(baseBoard);
   const metrics0 = computeStateMetrics(topology0, baseBoard);
   const A0 = metrics0?.A_open ?? 0;
+  const towerHeight = computeTowerHeightEstimate(baseBoard, topology0?.openRV?.bottomProfile);
 
   // --- ZONA DE DEBUG ---
   const debugClosed = metrics0?.A_closed_total ?? -999;
@@ -434,8 +477,7 @@ function planBestSequence(board, bagTypeIds) {
 
   // Límite de Seguridad (Opcional, pero recomendado para no morir por exceso de confianza)
   // Si la torre supera la altura 16 (quedan 6 líneas), volvemos a Default para bajarla.
-  const currentHeight = ROWS - (metrics0?.geometric?.openMinY ?? ROWS);
-  const isSafeHeight = currentHeight < 16;
+  const isSafeHeight = towerHeight < 16;
 
   let strategy = DEFAULT_STRATEGY;
   let strategyName = 'DEFAULT';
