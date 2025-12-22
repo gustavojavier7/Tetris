@@ -1061,6 +1061,8 @@ class TetrisGame {
   }
 
   reset() {
+    const goScreen = document.getElementById('tetris-gameover');
+    if (goScreen) goScreen.style.display = 'none';
     this.board = Array.from({length: ROWS}, () => Array(COLS).fill(-1));
     this.bag = [];
     this.initBag();
