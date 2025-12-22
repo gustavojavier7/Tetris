@@ -495,3 +495,44 @@ button:active {
     z-index: 10;
     /* transition: eliminada para simular NES */
 }
+
+/* Pantalla de Game Over (Modal) */
+#tetris-gameover {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    
+    background: var(--panel-bg);
+    border: 2px solid #000;
+    box-shadow: inset 2px 2px var(--panel-light), inset -2px -2px var(--panel-dark);
+    
+    padding: 20px;
+    width: 250px;
+    z-index: 200; /* Por encima de todo */
+    
+    display: none; /* JS lo cambiará a 'flex' */
+    flex-direction: column;
+    gap: 15px;
+    align-items: center;
+    text-align: center;
+}
+
+#tetris-gameover h2 {
+    color: #e74c3c; /* Rojo alerta */
+    font-size: 1.5rem;
+    text-shadow: 2px 2px 0px #000;
+    margin-bottom: 5px;
+}
+
+#tetris-gameover p {
+    font-size: 0.7rem;
+    line-height: 1.5;
+}
+
+#tetris-gameover .final-score {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #0050a4; /* Azul clásico */
+    margin: 5px 0;
+}
