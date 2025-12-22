@@ -1060,6 +1060,25 @@ class TetrisGame {
     }
   }
 
+  showGameOverScreen() {
+    const el = document.getElementById('tetris-gameover');
+    if (!el) return;
+
+    el.innerHTML = `
+        <h2>GAME OVER</h2>
+        <p>SCORE FINAL</p>
+        <div class="final-score">${this.score}</div>
+        <p>Lines: ${this.lines}</p>
+        <button class="btn-primary" id="retryBtn">TRY AGAIN</button>
+    `;
+    
+    // Activar botón de reintento
+    const retryBtn = el.querySelector('#retryBtn');
+    retryBtn.onclick = () => this.reset();
+
+    el.style.display = 'flex';
+  }
+
   reset() {
     const goScreen = document.getElementById('tetris-gameover');
     if (goScreen) goScreen.style.display = 'none';
@@ -1161,6 +1180,8 @@ class TetrisGame {
     const seconds = totalSeconds % 60;
     this.timerDisplay.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
   }
+
+  
 }
 
 window.addEventListener('load', () => {
