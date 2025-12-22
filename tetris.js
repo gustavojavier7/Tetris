@@ -333,6 +333,10 @@ class TetrisGame {
       this.fallAccumulator = 0;
       this.dasTimer = 0;
       this.keys = { left: false, right: false, down: false };
+      const statusEl = document.getElementById('mode-status');
+      if (statusEl) {
+        statusEl.textContent = this.iaAssist ? 'MODO: INICIANDO...' : 'MODO: MANUAL';
+      }
       this.updateIndicator();
     };
 
@@ -549,13 +553,18 @@ class TetrisGame {
   }
 
   handleWorkerMessage(e) {
-    const { type, ghost, requestId, mode } = e.data || {};
+    const { type, ghost, requestId, mode, strategy } = e.data || {};
     if (type !== 'DECISION') return;
     if (this.pendingBotRequestId !== null && requestId !== this.pendingBotRequestId) return;
 
     this.pendingBotRequestId = null;
     this.isBotThinking = false;
     this.botMode = mode || this.botMode;
+
+    if (strategy) {
+      const statusEl = document.getElementById('mode-status');
+      if (statusEl) statusEl.textContent = `MODO: ${strategy}`;
+    }
 
     if (this.iaAssist) {
       this.ghost = ghost;

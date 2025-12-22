@@ -59,6 +59,7 @@ function think(board, currentTypeId, nextTypeId, bagTypeIds) {
 
   const planResult = planBestSequence(board, sequence);
   const nextPlacement = planResult?.path?.[0];
+  const strategyName = planResult?.strategy || 'NEUTRAL';
 
   let ghost = null;
   if (nextPlacement && nextPlacement.position) {
@@ -70,7 +71,7 @@ function think(board, currentTypeId, nextTypeId, bagTypeIds) {
   }
 
   const mode = 'PLANNING';
-  return { ghost, mode };
+  return { ghost, mode, strategy: strategyName };
 }
 
 // --- API mínima para evaluación topológica ---
@@ -354,13 +355,20 @@ const DEFAULT_STRATEGY = {
   }
 };
 
-function planBestSequence(board, bagTypeIds) {
-  // 1. Cargar configuración de la estrategia aislada
-  const strategy = DEFAULT_STRATEGY;
-  const BEAM_WIDTH = strategy.BEAM_WIDTH;
+const STACK_STRATEGY = {
+  BEAM_WIDTH: 30,
+  weights: {
+    ...DEFAULT_STRATEGY.weights,
+    height: 1.2,
+    open: 0.02,
+    burial: 0.6
+  },
+  evaluate: DEFAULT_STRATEGY.evaluate
+};
 
+function planBestSequence(board, bagTypeIds) {
   if (!BoardAnalyzer.validate(board)) {
-    return { deltaAopen: 0, finalRugosidad: 0, path: [] };
+    return { deltaAopen: 0, finalRugosidad: 0, path: [], strategy: 'DEFAULT' };
   }
 
   const baseBoard = Array.isArray(board?.[0]) ? toBitBoard(board) : board;
@@ -369,11 +377,26 @@ function planBestSequence(board, bagTypeIds) {
     ? bagTypeIds.filter((id) => id !== null && id !== undefined)
     : [];
 
-  if (sequence.length === 0) return { path: [] };
+  if (sequence.length === 0) return { path: [], strategy: 'DEFAULT' };
 
   const topology0 = analyzeTopology(baseBoard);
   const metrics0 = computeStateMetrics(topology0, baseBoard);
   const A0 = metrics0?.A_open ?? 0;
+
+  const isClean = (metrics0?.A_closed_total ?? 0) === 0;
+  const hasBaseAccess = Array.isArray(topology0?.openRV?.bottomProfile)
+    ? topology0.openRV.bottomProfile.some((depth) => depth === ROWS - 1)
+    : false;
+
+  let strategy = DEFAULT_STRATEGY;
+  let strategyName = 'DEFAULT';
+
+  if (isClean && hasBaseAccess) {
+    strategy = STACK_STRATEGY;
+    strategyName = 'STACK';
+  }
+
+  const BEAM_WIDTH = strategy.BEAM_WIDTH;
 
   // Estado inicial
   let candidates = [{
@@ -444,11 +467,12 @@ function planBestSequence(board, bagTypeIds) {
   }
 
   const best = candidates[0];
-  if (!best) return { path: [] };
+  if (!best) return { path: [], strategy: strategyName };
 
   return {
     path: best.path,
-    deltaAopen: best.A_open - A0
+    deltaAopen: best.A_open - A0,
+    strategy: strategyName
   };
 }
 
