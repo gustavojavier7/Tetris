@@ -421,19 +421,23 @@ function planBestSequence(board, bagTypeIds) {
   console.log(`[WORKER DEBUG] ClosedArea: ${debugClosed} | Profile: [${debugProfile}]`);
   // --------------------
 
-  // Lógica de Trigger
+  // --- LÓGICA DE ACTIVACIÓN DE ESTRATEGIA (SIMPLIFICADA) ---
+
+  // Condición Única: Integridad Estructural
+  // Si no hay huecos (A_closed_total == 0), el tablero es sólido y seguro para construir.
   const isClean = (metrics0?.A_closed_total ?? 0) === 0;
 
-  // CORRECCIÓN: Usamos verificación simple de existencia, no Array.isArray
-  const profile = topology0?.openRV?.bottomProfile;
-  const hasBaseAccess = profile 
-    ? profile.some((depth) => depth === ROWS - 1)
-    : false;
+  // Límite de Seguridad (Opcional, pero recomendado para no morir por exceso de confianza)
+  // Si la torre supera la altura 16 (quedan 6 líneas), volvemos a Default para bajarla.
+  const currentHeight = ROWS - (metrics0?.geometric?.openMinY ?? ROWS);
+  const isSafeHeight = currentHeight < 16;
 
   let strategy = DEFAULT_STRATEGY;
   let strategyName = 'DEFAULT';
 
-  if (isClean && hasBaseAccess) {
+  // ELIMINAMOS 'hasBaseAccess' de la ecuación.
+  // Si está limpio y no nos vamos a chocar con el techo, construimos.
+  if (isClean && isSafeHeight) {
     strategy = STACK_STRATEGY;
     strategyName = 'STACK';
   }
