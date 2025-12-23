@@ -519,7 +519,7 @@ function planBestSequence(board, bagTypeIds) {
   }
   
   const realTowerHeight = ROWS - highestSolidY;
-  const isSafeHeight = realTowerHeight < 16;
+  const isSafeHeight = realTowerHeight < 11;
 
   // 3. Integridad Estructural del Pozo (Wall Check)
   let wallsIntact = true;
