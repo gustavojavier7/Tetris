@@ -567,6 +567,13 @@ function planBestSequence(board, bagTypeIds) {
   let strategy = DEFAULT_STRATEGY;
   let strategyName = 'DEFAULT';
 
+  // LOG DE DIAGNÓSTICO (Solo descomentar para depurar)
+  /*
+  if (linesCleared > 0 && linesCleared < 4) {
+      console.log(`[DEBUG] Limpieza detectada. Estado STACK: Clean=${isClean}, Safe=${isSafeHeight}, Walls=${wallsIntact}`);
+  }
+  */
+
   // Solo activamos STACK si:
   // 1. No hay huecos (Clean)
   // 2. No vamos a chocar con el techo (SafeHeight)
