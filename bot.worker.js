@@ -479,10 +479,64 @@ const STACK_STRATEGY = {
   }
 };
 
+function determineStrategyContext(board, topology, metrics) {
+  const profile = topology?.openRV?.bottomProfile;
+  const closedArea = metrics?.A_closed_total ?? metrics?.A_closed ?? 0;
+  const isClean = closedArea === 0;
+
+  const highestSolidY = findHighestOccupiedRow(board);
+  const realTowerHeight = highestSolidY === null ? 0 : ROWS - highestSolidY;
+  const isSafeHeight = realTowerHeight < 11;
+
+  let wallsIntact = false;
+  let wellCol = 11;
+  let wellDebug = null;
+
+  if (profile && isClean) {
+    wellCol = findTargetWellColumn(profile);
+    wallsIntact = areWallsIntact(board, profile, wellCol);
+
+    if (wallsIntact) {
+      const wellY = profile[wellCol];
+      let minSideHeight = 99;
+
+      if (wellCol > 0) {
+        const leftY = profile[wellCol - 1];
+        const h = wellY - leftY;
+        if (h < minSideHeight) minSideHeight = h;
+      }
+
+      if (wellCol < COLS - 1) {
+        const rightY = profile[wellCol + 1];
+        const h = wellY - rightY;
+        if (h < minSideHeight) minSideHeight = h;
+      }
+
+      wellDebug = `${wellCol} (D:${minSideHeight})`;
+    } else {
+      wellDebug = wellCol;
+    }
+  }
+
+  if (wellDebug === null) {
+    wellDebug = wellCol;
+  }
+
+  const strategyName = (isClean && isSafeHeight && wallsIntact) ? 'STACK' : 'DEFAULT';
+  const strategy = strategyName === 'STACK' ? STACK_STRATEGY : DEFAULT_STRATEGY;
+
+  return {
+    strategy,
+    strategyName,
+    wallsIntact,
+    wellColumn: wellDebug,
+    targetWell: profile ? wellCol : 11
+  };
+}
+
 function planBestSequence(board, bagTypeIds) {
   let wallsIntact = false;
   let debugWellCol = null;
-  let targetWellCol = 11;
 
   if (!BoardAnalyzer.validate(board)) {
     return { deltaAopen: 0, finalRugosidad: 0, path: [], strategy: 'DEFAULT', wallsIntact, wellColumn: debugWellCol };
@@ -509,90 +563,11 @@ function planBestSequence(board, bagTypeIds) {
   console.log(`[WORKER DEBUG] ClosedArea: ${debugClosed} | Profile: [${debugProfile}]`);
   // --------------------
 
-  // ---------------------------------------------------------
-  // LÓGICA DE TRIGGER UNIFICADA (v7.6)
-  // ---------------------------------------------------------
+  const initialContext = determineStrategyContext(baseBoard, topology0, metrics0);
+  wallsIntact = initialContext.wallsIntact;
+  debugWellCol = initialContext.wellColumn;
 
-  // 1. Integridad Básica
-  const isClean = (metrics0?.A_closed_total ?? 0) === 0;
-  
-  // 2. Altura Segura (CORREGIDO)
-  // Usamos el perfil de fondo para ver dónde empieza realmente la tierra.
-  // El perfil tiene la coord Y del aire más profundo. El bloque está en Y+1 (si Y<21).
-  // Pero una forma más segura es escanear el tablero o usar una función auxiliar.
-  
-  // Opción rápida usando el objeto metrics (si tuviera maxSolidY) o recalculando:
-  let highestSolidY = ROWS;
-  for (let y = 0; y < ROWS; y++) {
-    // (baseBoard es Uint16Array, usamos bitmask para verificar si la fila tiene algo)
-    if (baseBoard[y] !== 0) {
-      highestSolidY = y;
-      break;
-    }
-  }
-  
-  const realTowerHeight = ROWS - highestSolidY;
-  const isSafeHeight = realTowerHeight < 11;
-
-  // 3. Integridad Estructural del Pozo (Wall Check)
-  if (isClean && topology0?.openRV?.bottomProfile) {
-    const p = topology0.openRV.bottomProfile;
-    const wellCol = findTargetWellColumn(p);
-
-    debugWellCol = wellCol;
-    targetWellCol = wellCol;
-    wallsIntact = areWallsIntact(baseBoard, p, wellCol);
-
-    // CÁLCULO DE PROFUNDIDAD (NUEVO)
-    if (wallsIntact) {
-      // Profundidad = (Fondo del pozo) - (Pared más baja adyacente)
-      // Nota: En coordenadas de pantalla, mayor valor es más abajo.
-      // Queremos saber qué tan ALTA es la pared más baja (menor Y).
-
-      const wellY = p[wellCol]; // Ej: 21 (fondo)
-      let minSideHeight = 99;
-
-      // Revisar izquierda
-      if (wellCol > 0) {
-        const leftY = p[wellCol - 1]; // Ej: 10 (pared alta)
-        const h = wellY - leftY;
-        if (h < minSideHeight) minSideHeight = h;
-      }
-
-      // Revisar derecha
-      if (wellCol < COLS - 1) {
-        const rightY = p[wellCol + 1]; // Ej: 18 (pared baja, altura 3)
-        const h = wellY - rightY;
-        if (h < minSideHeight) minSideHeight = h;
-      }
-
-      // Exportamos el dato para verlo en el HUD
-      // Si minSideHeight es < 4, es un "Pozo Superficial"
-      debugWellCol = `${wellCol} (D:${minSideHeight})`;
-    }
-  }
-
-  // --- SELECCIÓN FINAL ---
-  let strategy = DEFAULT_STRATEGY;
-  let strategyName = 'DEFAULT';
-
-  // LOG DE DIAGNÓSTICO (Solo descomentar para depurar)
-  /*
-  if (linesCleared > 0 && linesCleared < 4) {
-      console.log(`[DEBUG] Limpieza detectada. Estado STACK: Clean=${isClean}, Safe=${isSafeHeight}, Walls=${wallsIntact}`);
-  }
-  */
-
-  // Solo activamos STACK si:
-  // 1. No hay huecos (Clean)
-  // 2. No vamos a chocar con el techo (SafeHeight)
-  // 3. Las paredes del futuro pozo son verticales y sólidas (WallsIntact)
-  if (isClean && isSafeHeight && wallsIntact) {
-    strategy = STACK_STRATEGY;
-    strategyName = 'STACK';
-  }
-
-  const BEAM_WIDTH = strategy.BEAM_WIDTH;
+  const BEAM_WIDTH = Math.max(DEFAULT_STRATEGY.BEAM_WIDTH, STACK_STRATEGY.BEAM_WIDTH);
 
   let candidates = [{
     board: baseBoard,
@@ -605,7 +580,10 @@ function planBestSequence(board, bagTypeIds) {
     openMinY: metrics0?.geometric?.openMinY ?? ROWS,
     burialScore: metrics0?.burialScore ?? 0,
     profile: topology0.openRV.bottomProfile, // <--- NECESARIO PARA STACK
-    targetWell: targetWellCol
+    targetWell: initialContext.targetWell,
+    strategyName: initialContext.strategyName,
+    wallsIntact: initialContext.wallsIntact,
+    wellColumn: initialContext.wellColumn
   }];
 
   for (let i = 0; i < sequence.length; i++) {
@@ -628,8 +606,9 @@ function planBestSequence(board, bagTypeIds) {
 
         const topology = analyzeTopology(nextBoard);
         const metrics = computeStateMetrics(topology, nextBoard);
+        const context = determineStrategyContext(nextBoard, topology, metrics);
         
-        nextCandidates.push({
+        const nextCandidate = {
           board: nextBoard,
           path: [...candidate.path, placement],
           linesCleared,
@@ -640,16 +619,22 @@ function planBestSequence(board, bagTypeIds) {
           openMinY: metrics.geometric.openMinY,
           burialScore: metrics.burialScore,
           profile: topology.openRV.bottomProfile, // <--- NECESARIO PARA STACK
-          targetWell: candidate.targetWell // <--- COPIAR ESTO
-        });
+          targetWell: context.targetWell,
+          strategyName: context.strategyName,
+          wallsIntact: context.wallsIntact,
+          wellColumn: context.wellColumn
+        };
+
+        nextCandidate.score = context.strategy.evaluate(nextCandidate);
+        nextCandidates.push(nextCandidate);
       }
     }
 
     if (nextCandidates.length === 0) break;
 
     nextCandidates.sort((a, b) => {
-      const scoreA = strategy.evaluate(a);
-      const scoreB = strategy.evaluate(b);
+      const scoreA = a.score ?? 0;
+      const scoreB = b.score ?? 0;
       if (scoreA !== scoreB) return scoreA - scoreB;
       // Desempates
       if (a.quadraticHeight !== b.quadraticHeight) return a.quadraticHeight - b.quadraticHeight;
@@ -668,9 +653,9 @@ function planBestSequence(board, bagTypeIds) {
     path: best?.path || [],
     deltaAopen: (best?.A_open ?? A0) - A0,
     linesCleared: best?.linesCleared || 0,
-    strategy: strategyName, // <--- ¡Siempre enviamos la estrategia calculada al inicio!
-    wallsIntact,
-    wellColumn: debugWellCol
+    strategy: best?.strategyName || initialContext.strategyName, // <--- ¡Siempre enviamos la estrategia calculada al inicio!
+    wallsIntact: best?.wallsIntact ?? wallsIntact,
+    wellColumn: best?.wellColumn ?? debugWellCol
   };
 }
 
