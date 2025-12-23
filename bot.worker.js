@@ -407,60 +407,62 @@ const STACK_STRATEGY = {
   BEAM_WIDTH: 35,
   
   weights: {
-    height: 0.05,     // Construir es barato
+    height: 0.05,
     rugosidad: 0.3,
     closed: 8.0,
     burial: 2.0,
     open: 0.1,
     well_wall: 0.0,
-    burn: 5000.0      // Penalización nuclear por limpiar líneas sueltas
+    burn: 5000.0
   },
 
   evaluate: function(candidate) {
     const w = this.weights;
     const linesCleared = candidate.linesCleared ?? 0;
     
-    // Penalización por Quema: Prohibido limpiar 1, 2 o 3 líneas.
+    // 1. PENALIZACIÓN NUCLEAR DE POZO (NUEVA LÓGICA)
+    // Si la pieza toca el pozo objetivo y NO hace un Tetris -> Castigo máximo.
+    let wellPenalty = 0;
+    
+    // Recuperamos el pozo objetivo guardado en el candidato (o recalculamos si no existe)
+    // Nota: parseInt maneja strings como "11 (D:3)" devolviendo 11.
+    const targetWell = (candidate.targetWell !== undefined) 
+        ? parseInt(candidate.targetWell) 
+        : 11; 
+
+    // Obtenemos el último movimiento
+    const lastMove = candidate.path[candidate.path.length - 1];
+    
+    if (lastMove) {
+        const { x, matrix } = lastMove.position;
+        const pieceWidth = matrix[0].length;
+        
+        // Verificamos intersección horizontal con el pozo
+        const touchesWell = (x <= targetWell) && (x + pieceWidth > targetWell);
+        
+        // CONDICIÓN DEL USUARIO:
+        // Si tocamos el pozo Y (limpiamos menos de 4 líneas), es un intento fallido de relleno.
+        if (touchesWell && linesCleared < 4) {
+            wellPenalty = w.burn; // Usamos el mismo peso que el "Burn" (5000)
+        }
+    }
+
+    // Penalización por Quema estándar (limpiar 1-3 líneas en cualquier lado)
     const burnPenalty = (linesCleared > 0 && linesCleared < 4) ? w.burn : 0;
 
     // Fallback defensivo
     if (!candidate.profile) {
         return (candidate.quadraticHeight * w.height) +
-               (candidate.rugosidad * w.rugosidad) +
-               (candidate.A_closed * w.closed) +
-               burnPenalty;
+               burnPenalty +
+               wellPenalty;
     }
 
     const p = candidate.profile;
     
-    // 1. IDENTIFICACIÓN DINÁMICA DE CHIMENEA
-    // Buscamos la columna más profunda (mayor Y) para que sea el pozo.
-    let wellCol = 11; // Default derecha
-    let maxDepth = -99;
-    
-    for (let x = 0; x < COLS; x++) {
-        if (p[x] > maxDepth) {
-            maxDepth = p[x];
-            wellCol = x;
-        } 
-        // Desempate: Preferimos bordes (0 o 11)
-        else if (p[x] === maxDepth) {
-            const wellIsEdge = (wellCol === 0 || wellCol === COLS - 1);
-            const currIsEdge = (x === 0 || x === COLS - 1);
-            
-            if (currIsEdge && !wellIsEdge) {
-                wellCol = x;
-            } else if (x === COLS - 1) {
-                wellCol = x; // Preferencia convencional a la derecha
-            }
-        }
-    }
-
-    // 2. RUGOSIDAD SELECTIVA (Ceguera Dinámica)
+    // 2. RUGOSIDAD SELECTIVA
     let stackRugosidad = 0;
     for (let x = 0; x < COLS - 1; x++) {
-        // Si el par actual (x, x+1) involucra al pozo, ignoramos el precipicio.
-        if (x === wellCol || x + 1 === wellCol) continue;
+        if (x === targetWell || x + 1 === targetWell) continue; // Usamos targetWell para consistencia
 
         if (p[x] !== -1 && p[x+1] !== -1) {
             stackRugosidad += Math.abs(p[x] - p[x+1]);
@@ -472,13 +474,15 @@ const STACK_STRATEGY = {
            (candidate.A_closed * w.closed) +
            (candidate.burialScore * w.burial) -
            (candidate.A_open * w.open) +
-           burnPenalty;
+           burnPenalty + 
+           wellPenalty; // <--- Sumamos la nueva penalización
   }
 };
 
 function planBestSequence(board, bagTypeIds) {
   let wallsIntact = false;
   let debugWellCol = null;
+  let targetWellCol = 11;
 
   if (!BoardAnalyzer.validate(board)) {
     return { deltaAopen: 0, finalRugosidad: 0, path: [], strategy: 'DEFAULT', wallsIntact, wellColumn: debugWellCol };
@@ -536,6 +540,7 @@ function planBestSequence(board, bagTypeIds) {
     const wellCol = findTargetWellColumn(p);
 
     debugWellCol = wellCol;
+    targetWellCol = wellCol;
     wallsIntact = areWallsIntact(baseBoard, p, wellCol);
 
     // CÁLCULO DE PROFUNDIDAD (NUEVO)
@@ -564,11 +569,6 @@ function planBestSequence(board, bagTypeIds) {
       // Exportamos el dato para verlo en el HUD
       // Si minSideHeight es < 4, es un "Pozo Superficial"
       debugWellCol = `${wellCol} (D:${minSideHeight})`;
-
-      // REGLA DE PROFUNDIDAD MÍNIMA: exigir >= 4 celdas antes de apilar/rellenar
-      if (minSideHeight < 4) {
-        wallsIntact = false;
-      }
     }
   }
 
@@ -604,7 +604,8 @@ function planBestSequence(board, bagTypeIds) {
     quadraticHeight: metrics0?.quadraticHeight ?? 0,
     openMinY: metrics0?.geometric?.openMinY ?? ROWS,
     burialScore: metrics0?.burialScore ?? 0,
-    profile: topology0.openRV.bottomProfile // <--- NECESARIO PARA STACK
+    profile: topology0.openRV.bottomProfile, // <--- NECESARIO PARA STACK
+    targetWell: targetWellCol
   }];
 
   for (let i = 0; i < sequence.length; i++) {
@@ -638,7 +639,8 @@ function planBestSequence(board, bagTypeIds) {
           quadraticHeight: metrics.quadraticHeight,
           openMinY: metrics.geometric.openMinY,
           burialScore: metrics.burialScore,
-          profile: topology.openRV.bottomProfile // <--- NECESARIO PARA STACK
+          profile: topology.openRV.bottomProfile, // <--- NECESARIO PARA STACK
+          targetWell: candidate.targetWell // <--- COPIAR ESTO
         });
       }
     }
