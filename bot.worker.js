@@ -385,8 +385,8 @@ const DEFAULT_STRATEGY = {
   weights: {
     height: 1.0,      // 1. ALTURA DOMINANTE
     rugosidad: 0.4,   // 2. RUGOSIDAD BALANCEADA
-    closed: 2.0,      // 3. IMPUESTO A HUECOS
-    burial: 0.5,      // 4. SEPULTURA LINEAL
+    closed: 4.0,      // 3. IMPUESTO A HUECOS
+    burial: 1.5,      // 4. SEPULTURA LINEAL
     open: 0.05        // Bonificación por área abierta
   },
 
