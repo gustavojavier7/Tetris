@@ -213,6 +213,7 @@ class TetrisGame {
     this.current = null;
     this.next = null;
     this.ghost = null;
+    this.lastWallsIntactState = null;
     this.elapsedMs = 0;
     this.timerInterval = null;
     this.timerAnchor = null;
@@ -562,7 +563,7 @@ class TetrisGame {
   }
 
   handleWorkerMessage(e) {
-    const { type, ghost, requestId, mode, strategy } = e.data || {};
+    const { type, ghost, requestId, mode, strategy, wallsIntact } = e.data || {};
     if (type !== 'DECISION') return;
     if (this.pendingBotRequestId !== null && requestId !== this.pendingBotRequestId) return;
 
@@ -573,6 +574,10 @@ class TetrisGame {
     if (strategy) {
       const statusEl = document.getElementById('mode-status');
       if (statusEl) statusEl.textContent = `MODO: ${strategy}`;
+    }
+
+    if (typeof wallsIntact === 'boolean') {
+      this.updateWallLogs(wallsIntact);
     }
 
     if (this.iaAssist) {
@@ -588,6 +593,31 @@ class TetrisGame {
 
     this.updateIndicator();
     this.render();
+  }
+
+  updateWallLogs(isIntact) {
+    if (this.lastWallsIntactState === isIntact) return;
+
+    this.lastWallsIntactState = isIntact;
+    const container = document.getElementById('wall-logs');
+    if (!container) return;
+
+    const placeholder = container.querySelector('.placeholder');
+    if (placeholder) placeholder.remove();
+
+    const div = document.createElement('div');
+    const text = isIntact ? "Estructura sólida" : "Estructura no sólida";
+    const cssClass = isIntact ? "solid" : "broken";
+    const time = new Date().toLocaleTimeString('es-ES', { hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit' });
+
+    div.className = `log-entry ${cssClass}`;
+    div.textContent = `[${time}] ${text}`;
+
+    container.prepend(div);
+
+    while (container.children.length > 5) {
+      container.lastElementChild.remove();
+    }
   }
 
   botThink() {

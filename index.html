@@ -78,10 +78,20 @@
                 <button class="btn-secondary" id="audioBtn">🔊 Sound On</button>
             </div>
             <div class="game-section">
-                <div class="inline-next-piece win95-block">
-                    <p>Next Piece</p>
-                    <div class="next-piece-box" id="tetris-nextpuzzle"></div>
+                <div class="left-column" style="display: flex; flex-direction: column; gap: 10px;">
+                    <div class="inline-next-piece win95-block">
+                        <p>Next Piece</p>
+                        <div class="next-piece-box" id="tetris-nextpuzzle"></div>
+                    </div>
+
+                    <div class="win95-block log-panel">
+                        <p>Wall Integrity</p>
+                        <div id="wall-logs" class="log-content">
+                            <div class="log-entry placeholder">Esperando datos...</div>
+                        </div>
+                    </div>
                 </div>
+
                 <div class="game-board-wrapper">
                     <div class="game-board">
                         <div class="game-grid" id="gameGrid"></div>

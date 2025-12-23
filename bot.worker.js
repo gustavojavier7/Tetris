@@ -71,7 +71,7 @@ function think(board, currentTypeId, nextTypeId, bagTypeIds) {
   }
 
   const mode = 'PLANNING';
-  return { ghost, mode, strategy: strategyName };
+  return { ghost, mode, strategy: strategyName, wallsIntact: planResult.wallsIntact };
 }
 
 // --- API mínima para evaluación topológica ---
@@ -472,7 +472,7 @@ const STACK_STRATEGY = {
 
 function planBestSequence(board, bagTypeIds) {
   if (!BoardAnalyzer.validate(board)) {
-    return { deltaAopen: 0, finalRugosidad: 0, path: [], strategy: 'DEFAULT' };
+    return { deltaAopen: 0, finalRugosidad: 0, path: [], strategy: 'DEFAULT', wallsIntact: false };
   }
 
   const baseBoard = Array.isArray(board?.[0]) ? toBitBoard(board) : board;
@@ -481,7 +481,9 @@ function planBestSequence(board, bagTypeIds) {
     ? bagTypeIds.filter((id) => id !== null && id !== undefined)
     : [];
 
-  if (sequence.length === 0) return { path: [], strategy: 'DEFAULT' };
+  let wallsIntact = false;
+
+  if (sequence.length === 0) return { path: [], strategy: 'DEFAULT', wallsIntact: wallsIntact };
 
   const topology0 = analyzeTopology(baseBoard);
   const metrics0 = computeStateMetrics(topology0, baseBoard);
@@ -657,7 +659,8 @@ function planBestSequence(board, bagTypeIds) {
     path: best?.path || [],
     deltaAopen: (best?.A_open ?? A0) - A0,
     linesCleared: best?.linesCleared || 0,
-    strategy: strategyName // <--- ¡Siempre enviamos la estrategia calculada al inicio!
+    strategy: strategyName, // <--- ¡Siempre enviamos la estrategia calculada al inicio!
+    wallsIntact
   };
 }
 
