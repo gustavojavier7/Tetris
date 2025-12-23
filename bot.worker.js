@@ -471,8 +471,10 @@ const STACK_STRATEGY = {
 };
 
 function planBestSequence(board, bagTypeIds) {
+  let wallsIntact = false;
+
   if (!BoardAnalyzer.validate(board)) {
-    return { deltaAopen: 0, finalRugosidad: 0, path: [], strategy: 'DEFAULT', wallsIntact: false };
+    return { deltaAopen: 0, finalRugosidad: 0, path: [], strategy: 'DEFAULT', wallsIntact };
   }
 
   const baseBoard = Array.isArray(board?.[0]) ? toBitBoard(board) : board;
@@ -480,8 +482,6 @@ function planBestSequence(board, bagTypeIds) {
   const sequence = Array.isArray(bagTypeIds)
     ? bagTypeIds.filter((id) => id !== null && id !== undefined)
     : [];
-
-  let wallsIntact = false;
 
   if (sequence.length === 0) return { path: [], strategy: 'DEFAULT', wallsIntact: wallsIntact };
 
@@ -524,45 +524,44 @@ function planBestSequence(board, bagTypeIds) {
   const isSafeHeight = realTowerHeight < 11;
 
   // 3. Integridad Estructural del Pozo (Wall Check)
-  let wallsIntact = true;
-
   if (isClean && topology0?.openRV?.bottomProfile) {
-      const p = topology0.openRV.bottomProfile;
-      
-      // A. Replicar lógica de elección de pozo para saber qué revisar
-      let wellCol = 11;
-      let maxDepth = -99;
-      for (let x = 0; x < COLS; x++) {
-          if (p[x] > maxDepth) {
-              maxDepth = p[x];
-              wellCol = x;
-          } else if (p[x] === maxDepth) {
-              const wellIsEdge = (wellCol === 0 || wellCol === COLS - 1);
-              const currIsEdge = (x === 0 || x === COLS - 1);
-              if (currIsEdge && !wellIsEdge) wellCol = x;
-              else if (x === COLS - 1) wellCol = x;
-          }
+    wallsIntact = true;
+    const p = topology0.openRV.bottomProfile;
+    
+    // A. Replicar lógica de elección de pozo para saber qué revisar
+    let wellCol = 11;
+    let maxDepth = -99;
+    for (let x = 0; x < COLS; x++) {
+      if (p[x] > maxDepth) {
+        maxDepth = p[x];
+        wellCol = x;
+      } else if (p[x] === maxDepth) {
+        const wellIsEdge = (wellCol === 0 || wellCol === COLS - 1);
+        const currIsEdge = (x === 0 || x === COLS - 1);
+        if (currIsEdge && !wellIsEdge) wellCol = x;
+        else if (x === COLS - 1) wellCol = x;
       }
+    }
 
-      // B. Escanear columnas adyacentes al pozo elegido
-      const checkCols = [];
-      if (wellCol > 0) checkCols.push(wellCol - 1);
-      if (wellCol < COLS - 1) checkCols.push(wellCol + 1);
+    // B. Escanear columnas adyacentes al pozo elegido
+    const checkCols = [];
+    if (wellCol > 0) checkCols.push(wellCol - 1);
+    if (wellCol < COLS - 1) checkCols.push(wellCol + 1);
 
-      for (const cx of checkCols) {
-          // Buscamos "Overhangs": Celdas vacías con algo ocupado encima
-          for (let y = 1; y < ROWS; y++) {
-              const isOccAbove = (baseBoard[y-1] & (1 << cx)) !== 0;
-              const isEmptyCurr = (baseBoard[y] & (1 << cx)) === 0;
+    for (const cx of checkCols) {
+      // Buscamos "Overhangs": Celdas vacías con algo ocupado encima
+      for (let y = 1; y < ROWS; y++) {
+        const isOccAbove = (baseBoard[y-1] & (1 << cx)) !== 0;
+        const isEmptyCurr = (baseBoard[y] & (1 << cx)) === 0;
 
-              if (isEmptyCurr && isOccAbove) {
-                  wallsIntact = false; 
-                  // console.log(`[TRIGGER] Pared rota en Col ${cx}, Y=${y}. Abortando STACK.`);
-                  break;
-              }
-          }
-          if (!wallsIntact) break;
+        if (isEmptyCurr && isOccAbove) {
+          wallsIntact = false; 
+          // console.log(`[TRIGGER] Pared rota en Col ${cx}, Y=${y}. Abortando STACK.`);
+          break;
+        }
       }
+      if (!wallsIntact) break;
+    }
   }
 
   // --- SELECCIÓN FINAL ---
