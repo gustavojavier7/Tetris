@@ -537,6 +537,34 @@ function planBestSequence(board, bagTypeIds) {
 
     debugWellCol = wellCol;
     wallsIntact = areWallsIntact(baseBoard, p, wellCol);
+
+    // CÁLCULO DE PROFUNDIDAD (NUEVO)
+    if (wallsIntact) {
+      // Profundidad = (Fondo del pozo) - (Pared más baja adyacente)
+      // Nota: En coordenadas de pantalla, mayor valor es más abajo.
+      // Queremos saber qué tan ALTA es la pared más baja (menor Y).
+
+      const wellY = p[wellCol]; // Ej: 21 (fondo)
+      let minSideHeight = 99;
+
+      // Revisar izquierda
+      if (wellCol > 0) {
+        const leftY = p[wellCol - 1]; // Ej: 10 (pared alta)
+        const h = wellY - leftY;
+        if (h < minSideHeight) minSideHeight = h;
+      }
+
+      // Revisar derecha
+      if (wellCol < COLS - 1) {
+        const rightY = p[wellCol + 1]; // Ej: 18 (pared baja, altura 3)
+        const h = wellY - rightY;
+        if (h < minSideHeight) minSideHeight = h;
+      }
+
+      // Exportamos el dato para verlo en el HUD
+      // Si minSideHeight es < 4, es un "Pozo Superficial"
+      debugWellCol = `${wellCol} (D:${minSideHeight})`;
+    }
   }
 
   // --- SELECCIÓN FINAL ---
