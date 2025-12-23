@@ -564,6 +564,11 @@ function planBestSequence(board, bagTypeIds) {
       // Exportamos el dato para verlo en el HUD
       // Si minSideHeight es < 4, es un "Pozo Superficial"
       debugWellCol = `${wellCol} (D:${minSideHeight})`;
+
+      // REGLA DE PROFUNDIDAD MÍNIMA: exigir >= 4 celdas antes de apilar/rellenar
+      if (minSideHeight < 4) {
+        wallsIntact = false;
+      }
     }
   }
 
@@ -706,6 +711,14 @@ function areWallsIntact(baseBoard, bottomProfile, wellColFromPlan = null) {
   if (wellCol < COLS - 1) checkCols.push(wellCol + 1);
 
   for (const cx of checkCols) {
+    // 1. ANCLAJE AL SUELO: La celda en ROWS-1 debe estar ocupada
+    const isAnchored = (baseBoard[ROWS - 1] & (1 << cx)) !== 0;
+    if (!isAnchored) {
+      console.warn(`[AGENT][worker] Fast-Fail: pared sin anclaje en Col ${cx}.`);
+      return false;
+    }
+
+    // 2. CONTINUIDAD: Evitar voladizos (aire bajo bloque)
     // Buscamos "Overhangs": Celdas vacías con algo ocupado encima
     for (let y = 1; y < ROWS; y++) {
       const isOccAbove = (baseBoard[y - 1] & (1 << cx)) !== 0;
