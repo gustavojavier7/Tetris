@@ -525,43 +525,7 @@ function planBestSequence(board, bagTypeIds) {
 
   // 3. Integridad Estructural del Pozo (Wall Check)
   if (isClean && topology0?.openRV?.bottomProfile) {
-    wallsIntact = true;
-    const p = topology0.openRV.bottomProfile;
-    
-    // A. Replicar lógica de elección de pozo para saber qué revisar
-    let wellCol = 11;
-    let maxDepth = -99;
-    for (let x = 0; x < COLS; x++) {
-      if (p[x] > maxDepth) {
-        maxDepth = p[x];
-        wellCol = x;
-      } else if (p[x] === maxDepth) {
-        const wellIsEdge = (wellCol === 0 || wellCol === COLS - 1);
-        const currIsEdge = (x === 0 || x === COLS - 1);
-        if (currIsEdge && !wellIsEdge) wellCol = x;
-        else if (x === COLS - 1) wellCol = x;
-      }
-    }
-
-    // B. Escanear columnas adyacentes al pozo elegido
-    const checkCols = [];
-    if (wellCol > 0) checkCols.push(wellCol - 1);
-    if (wellCol < COLS - 1) checkCols.push(wellCol + 1);
-
-    for (const cx of checkCols) {
-      // Buscamos "Overhangs": Celdas vacías con algo ocupado encima
-      for (let y = 1; y < ROWS; y++) {
-        const isOccAbove = (baseBoard[y-1] & (1 << cx)) !== 0;
-        const isEmptyCurr = (baseBoard[y] & (1 << cx)) === 0;
-
-        if (isEmptyCurr && isOccAbove) {
-          wallsIntact = false; 
-          // console.log(`[TRIGGER] Pared rota en Col ${cx}, Y=${y}. Abortando STACK.`);
-          break;
-        }
-      }
-      if (!wallsIntact) break;
-    }
+    wallsIntact = areWallsIntact(baseBoard, topology0.openRV.bottomProfile);
   }
 
   // --- SELECCIÓN FINAL ---
@@ -661,6 +625,45 @@ function planBestSequence(board, bagTypeIds) {
     strategy: strategyName, // <--- ¡Siempre enviamos la estrategia calculada al inicio!
     wallsIntact
   };
+}
+
+function areWallsIntact(baseBoard, bottomProfile) {
+  const p = bottomProfile;
+
+  // A. Replicar lógica de elección de pozo para saber qué revisar
+  let wellCol = 11;
+  let maxDepth = -99;
+  for (let x = 0; x < COLS; x++) {
+    if (p[x] > maxDepth) {
+      maxDepth = p[x];
+      wellCol = x;
+    } else if (p[x] === maxDepth) {
+      const wellIsEdge = (wellCol === 0 || wellCol === COLS - 1);
+      const currIsEdge = (x === 0 || x === COLS - 1);
+      if (currIsEdge && !wellIsEdge) wellCol = x;
+      else if (x === COLS - 1) wellCol = x;
+    }
+  }
+
+  // B. Escanear columnas adyacentes al pozo elegido
+  const checkCols = [];
+  if (wellCol > 0) checkCols.push(wellCol - 1);
+  if (wellCol < COLS - 1) checkCols.push(wellCol + 1);
+
+  for (const cx of checkCols) {
+    // Buscamos "Overhangs": Celdas vacías con algo ocupado encima
+    for (let y = 1; y < ROWS; y++) {
+      const isOccAbove = (baseBoard[y - 1] & (1 << cx)) !== 0;
+      const isEmptyCurr = (baseBoard[y] & (1 << cx)) === 0;
+
+      if (isEmptyCurr && isOccAbove) {
+        console.warn(`[AGENT][worker] Fast-Fail: pared rota en Col ${cx}, Y=${y}.`);
+        return false;
+      }
+    }
+  }
+
+  return true;
 }
 
 function collides(matrix, board, px, py) {
