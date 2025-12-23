@@ -413,7 +413,7 @@ const STACK_STRATEGY = {
     burial: 2.0,
     open: 0.1,
     well_wall: 0.0,
-    burn: 5000.0
+    burn: 1000000.0
   },
 
   evaluate: function(candidate) {
