@@ -214,6 +214,7 @@ class TetrisGame {
     this.next = null;
     this.ghost = null;
     this.lastWallsIntactState = null;
+    this.lastWellColumn = null;
     this.elapsedMs = 0;
     this.timerInterval = null;
     this.timerAnchor = null;
@@ -563,7 +564,7 @@ class TetrisGame {
   }
 
   handleWorkerMessage(e) {
-    const { type, ghost, requestId, mode, strategy, wallsIntact } = e.data || {};
+    const { type, ghost, requestId, mode, strategy, wallsIntact, wellColumn } = e.data || {};
     if (type !== 'DECISION') return;
     if (this.pendingBotRequestId !== null && requestId !== this.pendingBotRequestId) return;
 
@@ -577,7 +578,7 @@ class TetrisGame {
     }
 
     if (typeof wallsIntact === 'boolean') {
-      this.updateWallLogs(wallsIntact);
+      this.updateWallLogs(wallsIntact, wellColumn);
     }
 
     if (this.iaAssist) {
@@ -595,27 +596,38 @@ class TetrisGame {
     this.render();
   }
 
-  updateWallLogs(isIntact) {
-    if (this.lastWallsIntactState === isIntact) return;
+  updateWallLogs(isIntact, wellCol) {
+    if (this.lastWallsIntactState === isIntact && this.lastWellColumn === wellCol) return;
 
     this.lastWallsIntactState = isIntact;
+    this.lastWellColumn = wellCol;
     const container = document.getElementById('wall-logs');
     if (!container) return;
 
     const placeholder = container.querySelector('.placeholder');
     if (placeholder) placeholder.remove();
 
+    const time = new Date().toLocaleTimeString('es-ES', { hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit' });
+
+    if (wellCol !== null && wellCol !== undefined) {
+      const divCol = document.createElement('div');
+      divCol.className = 'log-entry';
+      divCol.style.color = '#00ffff';
+      divCol.style.borderColor = '#00aaaa';
+      divCol.textContent = `[${time}] Columna candidata: ${wellCol}`;
+      container.prepend(divCol);
+    }
+
     const div = document.createElement('div');
     const text = isIntact ? "Estructura sólida" : "Estructura no sólida";
     const cssClass = isIntact ? "solid" : "broken";
-    const time = new Date().toLocaleTimeString('es-ES', { hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit' });
 
     div.className = `log-entry ${cssClass}`;
     div.textContent = `[${time}] ${text}`;
 
     container.prepend(div);
 
-    while (container.children.length > 5) {
+    while (container.children.length > 8) {
       container.lastElementChild.remove();
     }
   }
