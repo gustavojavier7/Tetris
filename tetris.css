@@ -307,6 +307,43 @@ button:active {
         justify-content: center;
 }
 
+/* Panel de logs de integridad de pared */
+.log-panel {
+    width: calc(var(--unit) * 7.5); /* Mismo ancho que next-piece */
+    background: #000; /* Fondo negro para contraste de logs */
+    color: #0f0;      /* Texto verde terminal */
+    padding: 6px;
+    font-family: 'Courier New', monospace;
+    border: 2px solid #808080;
+}
+
+.log-panel p {
+    color: #fff;
+    margin-bottom: 5px;
+    border-bottom: 1px solid #555;
+    padding-bottom: 2px;
+    text-align: center;
+}
+
+.log-content {
+    height: 100px; /* Altura fija */
+    overflow: hidden;
+    display: flex;
+    flex-direction: column-reverse; /* Los nuevos aparecen abajo o arriba según preferencia */
+    font-size: 0.5rem;
+    gap: 2px;
+}
+
+.log-entry {
+    border-left: 2px solid;
+    padding-left: 4px;
+    opacity: 0.8;
+}
+
+.log-entry.solid { border-color: #0f0; color: #cfc; }
+.log-entry.broken { border-color: #f00; color: #fcc; }
+.placeholder { color: #555; font-style: italic; border: none; }
+
 .game-grid {
 	position: absolute;
 	inset: 0;
