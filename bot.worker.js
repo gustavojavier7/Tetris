@@ -71,7 +71,13 @@ function think(board, currentTypeId, nextTypeId, bagTypeIds) {
   }
 
   const mode = 'PLANNING';
-  return { ghost, mode, strategy: strategyName, wallsIntact: planResult.wallsIntact };
+  return {
+    ghost,
+    mode,
+    strategy: strategyName,
+    wallsIntact: planResult.wallsIntact,
+    wellColumn: planResult.wellColumn
+  };
 }
 
 // --- API mínima para evaluación topológica ---
@@ -472,9 +478,10 @@ const STACK_STRATEGY = {
 
 function planBestSequence(board, bagTypeIds) {
   let wallsIntact = false;
+  let debugWellCol = null;
 
   if (!BoardAnalyzer.validate(board)) {
-    return { deltaAopen: 0, finalRugosidad: 0, path: [], strategy: 'DEFAULT', wallsIntact };
+    return { deltaAopen: 0, finalRugosidad: 0, path: [], strategy: 'DEFAULT', wallsIntact, wellColumn: debugWellCol };
   }
 
   const baseBoard = Array.isArray(board?.[0]) ? toBitBoard(board) : board;
@@ -483,7 +490,7 @@ function planBestSequence(board, bagTypeIds) {
     ? bagTypeIds.filter((id) => id !== null && id !== undefined)
     : [];
 
-  if (sequence.length === 0) return { path: [], strategy: 'DEFAULT', wallsIntact: wallsIntact };
+  if (sequence.length === 0) return { path: [], strategy: 'DEFAULT', wallsIntact: wallsIntact, wellColumn: debugWellCol };
 
   const topology0 = analyzeTopology(baseBoard);
   const metrics0 = computeStateMetrics(topology0, baseBoard);
@@ -525,7 +532,11 @@ function planBestSequence(board, bagTypeIds) {
 
   // 3. Integridad Estructural del Pozo (Wall Check)
   if (isClean && topology0?.openRV?.bottomProfile) {
-    wallsIntact = areWallsIntact(baseBoard, topology0.openRV.bottomProfile);
+    const p = topology0.openRV.bottomProfile;
+    const wellCol = findTargetWellColumn(p);
+
+    debugWellCol = wellCol;
+    wallsIntact = areWallsIntact(baseBoard, p, wellCol);
   }
 
   // --- SELECCIÓN FINAL ---
@@ -623,27 +634,43 @@ function planBestSequence(board, bagTypeIds) {
     deltaAopen: (best?.A_open ?? A0) - A0,
     linesCleared: best?.linesCleared || 0,
     strategy: strategyName, // <--- ¡Siempre enviamos la estrategia calculada al inicio!
-    wallsIntact
+    wallsIntact,
+    wellColumn: debugWellCol
   };
 }
 
-function areWallsIntact(baseBoard, bottomProfile) {
-  const p = bottomProfile;
+function findTargetWellColumn(profile) {
+  if (!profile) return 11;
 
-  // A. Replicar lógica de elección de pozo para saber qué revisar
   let wellCol = 11;
   let maxDepth = -99;
+
   for (let x = 0; x < COLS; x++) {
-    if (p[x] > maxDepth) {
-      maxDepth = p[x];
+    if (profile[x] > maxDepth) {
+      maxDepth = profile[x];
       wellCol = x;
-    } else if (p[x] === maxDepth) {
+    } else if (profile[x] === maxDepth) {
       const wellIsEdge = (wellCol === 0 || wellCol === COLS - 1);
       const currIsEdge = (x === 0 || x === COLS - 1);
-      if (currIsEdge && !wellIsEdge) wellCol = x;
-      else if (x === COLS - 1) wellCol = x;
+
+      if (currIsEdge && !wellIsEdge) {
+        wellCol = x;
+      } else if (x === COLS - 1) {
+        wellCol = x; // Preferencia convencional a la derecha
+      }
     }
   }
+
+  return wellCol;
+}
+
+function areWallsIntact(baseBoard, bottomProfile, wellColFromPlan = null) {
+  const p = bottomProfile;
+
+  // A. Selección de pozo (reutilizando heurística)
+  const wellCol = (wellColFromPlan === null || wellColFromPlan === undefined)
+    ? findTargetWellColumn(p)
+    : wellColFromPlan;
 
   // B. Escanear columnas adyacentes al pozo elegido
   const checkCols = [];
