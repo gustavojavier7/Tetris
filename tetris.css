@@ -233,7 +233,7 @@ button:active {
     border: none;
     background-image: url('https://i.imgur.com/GrIgPHU.png');
     background-repeat: no-repeat;
-    background-size: calc(var(--unit) * 8) var(--unit);
+    background-size: calc(var(--unit) * 9) var(--unit);
     image-rendering: pixelated;
 }
 
