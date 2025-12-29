@@ -1,320 +1,337 @@
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
 :root {
-        --unit: 20px;
-        --area-x: 12;
-        --area-y: 22;
-        --sidebar-units: 9.5;
-        --grid-stroke: 1px;
-        --panel-bg: #dcdcdc;
-        --panel-dark: #7d7d7d;
-        --panel-light: #ffffff;
-        --beige: #f6ebd1;
+    --unit: 20px;
+    --area-x: 12;
+    --area-y: 22;
+    /* Colores del código de referencia */
+    --bg-color: #111;
+    --panel-border: #fff;
+    --text-color: #fff;
 }
 
 * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
 body {
-        font-family: 'Press Start 2P', 'Courier New', monospace;
-        background: #c3c3c3;
-        color: #1a1a1a;
-        height: 100vh;
-        width: 100vw;
-        overflow: hidden;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+    font-family: 'Press Start 2P', 'Courier New', monospace;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .container {
-        width: 100%;
-        max-width: 1100px;
-        height: 100vh;
-        padding: 8px 18px 18px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
+    width: 100%;
+    max-width: 1100px;
+    height: 100vh;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
 
+/* --- ESTÉTICA RETRO / ARCADE (Reemplaza Win95) --- */
+
 .header {
-        text-align: center;
-        padding: 6px;
-        background: var(--panel-bg);
-        border: 2px solid #000;
-        box-shadow: inset 2px 2px var(--panel-light), inset -2px -2px var(--panel-dark);
+    text-align: center;
+    padding: 10px;
+    background: #000;
+    border: 2px solid var(--panel-border);
+    text-transform: uppercase;
 }
 
 .header h1 {
-        font-size: 1.7rem;
-        letter-spacing: 5px;
-        margin-bottom: 4px;
+    font-size: 1.5rem;
+    color: #fff;
+    text-shadow: 2px 2px 0 #333;
+    margin-bottom: 5px;
 }
 
-.header p {
-        font-size: 0.6rem;
-}
-
+.header p,
 .header .version {
-        font-size: 0.8rem;
-        color: #0050a4;
+    font-size: 0.6rem;
+    color: #aaa;
 }
 
 #mode-status {
-        margin-top: 6px;
-        font-size: 0.65rem;
-        color: #ffffff;
-        text-shadow: 0 0 6px rgba(0, 0, 0, 0.45);
+    color: #ffcc00;
+    font-size: 0.7rem;
+    margin-top: 5px;
 }
 
 .main-grid {
-        flex: 1;
-        display: grid;
-        grid-template-columns: 300px 1fr;
-        gap: 14px;
-        min-height: 0;
+    flex: 1;
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 20px;
+    min-height: 0;
 }
 
-.main-grid > div {
-        min-height: 0;
+/* Paneles Laterales */
+.control-panel,
+.game-section {
+    background: #000;
+    border: 2px solid var(--panel-border);
+    padding: 15px;
 }
 
 .control-panel {
-        background: var(--panel-bg);
-        border: 2px solid #000;
-        box-shadow: inset 2px 2px var(--panel-light), inset -2px -2px var(--panel-dark);
-        padding: 12px;
-        display: grid;
-        grid-template-columns: 1fr;
-        grid-auto-rows: min-content;
-        gap: 10px;
-        overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
 }
 
 .win95-block {
-        border: 2px solid #000;
-        box-shadow: inset 2px 2px var(--panel-light), inset -2px -2px var(--panel-dark);
-        background: #f4f4f4;
-        padding: 10px;
+    background: #000;
+    border: 1px solid #444;
+    padding: 10px;
+    box-shadow: none;
 }
 
-.stats-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-}
-
-.stat-card {
-        text-align: center;
-}
-
-.stat-card label {
-        font-size: 0.55rem;
-        display: block;
-        margin-bottom: 4px;
-}
-
-.stat-card .value {
-        font-size: 1.2rem;
-}
-
+/* Estadísticas */
+.stat-card label,
 .timer-box label {
-        font-size: 0.6rem;
-        display: block;
-        margin-bottom: 4px;
+    color: #aaa;
+    font-size: 0.6rem;
+    margin-bottom: 5px;
+    display: block;
 }
 
+.stat-card .value,
 .timer-box .value {
-        font-size: 1.3rem;
+    color: #fff;
+    font-size: 1rem;
 }
 
-.controls {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-}
-
+/* Botones estilo Arcade */
 button {
-        font-family: inherit;
-        font-size: 0.7rem;
-        padding: 10px;
-        border: 2px solid #000;
-        background: #eaeaea;
-        box-shadow: inset 2px 2px #fff, inset -2px -2px var(--panel-dark);
-        cursor: pointer;
-        text-transform: uppercase;
+    font-family: inherit;
+    font-size: 0.6rem;
+    padding: 10px;
+    border: 2px solid #fff;
+    background: #000;
+    color: #fff;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: background 0.1s;
 }
 
-.btn-primary { background: #f2c84b; }
-.btn-secondary { background: #e0e0e0; }
+button:hover {
+    background: #333;
+}
 
 button:active {
-        box-shadow: inset -2px -2px #fff, inset 2px 2px var(--panel-dark);
+    background: #555;
 }
 
-.settings-panel,
-.bot-settings,
-.mode-switches {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        font-size: 0.6rem;
+.btn-primary {
+    border-color: #ffcc00;
+    color: #ffcc00;
 }
 
-.switch-group label {
-        font-size: 0.55rem;
-        margin-bottom: 4px;
-        display: block;
+.btn-secondary {
+    border-color: #fff;
 }
 
+/* Interruptores */
 .switch {
-        width: 40px;
-        height: 18px;
-        border: 2px solid #000;
-        background: #e0e0e0;
-        box-shadow: inset 2px 2px #fff, inset -2px -2px var(--panel-dark);
-        position: relative;
-        cursor: pointer;
+    background: #000;
+    border: 2px solid #555;
+    position: relative;
+    width: 40px;
+    height: 18px;
+    cursor: pointer;
 }
 
 .switch::after {
-        content: '';
-        position: absolute;
-        top: 2px;
-        left: 2px;
-        width: 12px;
-        height: 12px;
-        background: #000;
-        transition: transform 0.2s ease;
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    background: #555;
+    transition: transform 0.2s ease;
+}
+
+.switch.active {
+    border-color: #00e5ff !important;
+    background-color: #000 !important;
 }
 
 .switch.active::after {
-        transform: translateX(20px);
+    background: #00e5ff;
+    transform: translateX(20px);
 }
 
-#bot-strategy-indicator {
-        font-weight: bold;
-        font-size: 0.6rem;
-        padding: 4px 8px;
-        text-align: center;
+.toggle-btn {
+    font-size: 0.7rem;
+    line-height: 1;
+    padding: 6px 10px;
 }
 
-.bot-strategy.survival { color: #e74c3c; }
-.bot-strategy.tetris   { color: #2ecc71; }
-.bot-strategy.attack   { color: #f39c12; }
-.bot-strategy.balanced { color: #4a90e2; }
-.bot-strategy.zen      { color: #9b59b6; }
-
-/* Animación de pulso para el bot */
-@keyframes blink-green {
-        0% { background-color: #222; color: #fff; border-color: #fff; }
-        50% { background-color: #00ff00; color: #000; border-color: #00ff00; box-shadow: 0 0 8px #00ff00; }
-        100% { background-color: #222; color: #fff; border-color: #fff; }
-}
-
-.bot-thinking {
-        animation: blink-green 0.5s infinite; /* Flash cada 0.5s */
-        font-weight: bold;
-}
-
-/* Estado inactivo/espera */
-.bot-idle {
-        background-color: #222;
-        color: #888;
-}
+/* --- TABLERO Y PIEZAS (SPRITES) --- */
 
 .game-section {
-        background: var(--panel-bg);
-        border: 2px solid #000;
-        box-shadow: inset 2px 2px var(--panel-light), inset -2px -2px var(--panel-dark);
-        padding: 12px;
-        display: flex;
-        gap: 12px;
-        align-items: stretch;
-        justify-content: center;
-        height: 100%;
-        min-height: 0;
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+    justify-content: center;
+    height: 100%;
+    min-height: 0;
 }
 
 .game-board-wrapper {
-        flex: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        min-height: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    background: #000;
 }
 
 .game-board {
-	flex: 0 0 auto;
-	width: calc(var(--unit) * var(--area-x));
-	height: 100%;
-	max-height: none;
-	background: var(--beige);
-	border: 2px solid #000;
-	box-shadow: inset 2px 2px var(--panel-light), inset -2px -2px var(--panel-dark);
-	position: relative;
-	overflow: hidden;
-	display: flex;
-	align-items: stretch;
-	justify-content: center;
+    background: #000;
+    border: 2px solid #fff;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
 }
 
-.game-board::after {
-        content: '';
-        position: absolute;
-        inset: 6px;
-        border: 1px dotted rgba(0, 0, 0, 0.25);
-        pointer-events: none;
+.game-grid {
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-size: var(--unit) var(--unit);
 }
 
+#tetris-area {
+    background: transparent;
+    position: absolute !important;
+    inset: 0 !important;
+    pointer-events: none;
+}
+
+/* SPRITES DE LOS BLOQUES */
+#tetris-area > div,
+#tetris-nextpuzzle > div,
+.active-block {
+    width: var(--unit);
+    height: var(--unit);
+    position: absolute;
+    box-sizing: border-box;
+    border: none;
+    background-image: url('https://i.imgur.com/GrIgPHU.png');
+    background-repeat: no-repeat;
+    background-size: calc(var(--unit) * 8) var(--unit);
+    image-rendering: pixelated;
+}
+
+.active-block {
+    z-index: 10;
+}
+
+/* Mapeo de colores/índices según el código de referencia */
+.block0 { background-position-x: calc(var(--unit) * -1); }
+.block1 { background-position-x: calc(var(--unit) * -2); }
+.block2 { background-position-x: calc(var(--unit) * -6); }
+.block3 { background-position-x: calc(var(--unit) * -7); }
+.block4 { background-position-x: calc(var(--unit) * -5); }
+.block5 { background-position-x: calc(var(--unit) * -3); }
+.block6 { background-position-x: calc(var(--unit) * -4); }
+.block-garbage { background-position-x: 0; }
+
+/* --- ANIMACIÓN DE DESTRUCCIÓN --- */
+@keyframes flash-destruct {
+    0% {
+        filter: brightness(1) sepia(0);
+        background-color: transparent;
+    }
+    25% {
+        filter: brightness(10) sepia(1);
+        background-color: #fff;
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.1);
+    }
+}
+
+.destruct-anim {
+    animation: flash-destruct 0.4s forwards ease-out;
+    z-index: 100;
+}
+
+/* Ghost */
+.bot-ghost {
+    opacity: 0.3;
+    border: 1px solid #fff !important;
+    background-image: none !important;
+}
+
+.bot-controlled {
+    filter: drop-shadow(0 0 8px rgba(0, 229, 255, 0.8));
+}
+
+/* Next Piece Box */
 .inline-next-piece {
-        position: relative;
-        width: calc(var(--unit) * 7.5);
-        background: var(--panel-bg);
-        border: 2px solid #000;
-        box-shadow: inset 2px 2px var(--panel-light), inset -2px -2px var(--panel-dark);
-        padding: 10px;
-        z-index: 20;
-        height: max-content;
-        align-self: flex-start;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        text-align: center;
+    position: relative;
+    width: calc(var(--unit) * 7.5);
+    background: #000;
+    border: 2px solid #fff;
+    color: #fff;
+    padding: 10px;
+    z-index: 20;
+    height: max-content;
+    align-self: flex-start;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-align: center;
 }
 
 .inline-next-piece p {
-        font-size: 0.5rem;
-        margin-bottom: 4px;
+    font-size: 0.5rem;
+    margin-bottom: 4px;
 }
 
-.inline-next-piece .next-piece-box {
-        border: 1px dashed #000;
-        background: #fff;
-        width: calc(var(--unit) * 7.5);
-    	height: calc(var(--unit) * 6);
-        transform: scale(0.7);
-        transform-origin: top center;
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+.next-piece-box {
+    border: none;
+    background: #000;
+    width: calc(var(--unit) * 7.5);
+    height: calc(var(--unit) * 6);
+    transform: scale(0.7);
+    transform-origin: top center;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-/* Panel de logs de integridad de pared */
+/* Logs */
 .log-panel {
-    width: calc(var(--unit) * 7.5); /* Mismo ancho que next-piece */
-    background: #000; /* Fondo negro para contraste de logs */
-    color: #0f0;      /* Texto verde terminal */
+    width: calc(var(--unit) * 7.5);
+    background: #111;
+    border: 1px solid #333;
+    color: #0f0;
     padding: 6px;
     font-family: 'Courier New', monospace;
-    border: 2px solid #808080;
 }
 
 .log-panel p {
@@ -326,10 +343,10 @@ button:active {
 }
 
 .log-content {
-    height: 100px; /* Altura fija */
+    height: 100px;
     overflow: hidden;
     display: flex;
-    flex-direction: column-reverse; /* Los nuevos aparecen abajo o arriba según preferencia */
+    flex-direction: column-reverse;
     font-size: 0.5rem;
     gap: 2px;
 }
@@ -344,232 +361,83 @@ button:active {
 .log-entry.broken { border-color: #f00; color: #fcc; }
 .placeholder { color: #555; font-style: italic; border: none; }
 
-.game-grid {
-	position: absolute;
-	inset: 0;
-	box-sizing: border-box;
-	background-image:
-		linear-gradient(to right, rgba(0, 0, 0, 0.08) var(--grid-stroke), transparent var(--grid-stroke)),
-		linear-gradient(to bottom, rgba(0, 0, 0, 0.08) var(--grid-stroke), transparent var(--grid-stroke));
-	background-size: var(--unit) var(--unit);
-	pointer-events: none;
-}
-
-.game-grid::after {
-	content: '';
-	position: absolute;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	height: 2px;
-	background: #000;
-}
-
-.game-message {
-        position: absolute;
-        top: 10px;
-        left: 50%;
-        transform: translateX(-50%);
-        padding: 4px 8px;
-        background: rgba(255, 255, 255, 0.7);
-        border: 1px solid #000;
-        font-size: 0.6rem;
-        pointer-events: none;
-}
-
-#tetris-area {
-	background: transparent;
-        position: absolute !important;
-        inset: 0 !important;
-        pointer-events: none;
-        border: 1px solid #000;
-}
-
-/* Aplica a los bloques dentro del área de juego y en la previsualización */
-#tetris-area > div,
-#tetris-nextpuzzle > div {
-        width: var(--unit);   /* Usa la variable definida en :root (20px) */
-        height: var(--unit);
-        position: absolute;   /* Crítico: permite que top/left del JS funcionen */
-        box-sizing: border-box;
-        border: 1px solid rgba(0, 0, 0, 0.2); /* Opcional: borde sutil para relieve */
-}
-
-.block0 { background: #1F6F43; }
-.block1 { background: #0B2A4A; }
-.block2 { background: #8A4FFF; }
-.block3 { background: #7A4A1E; }
-.block4 { background: #B00020; }
-.block5 { background: #5A5A5A; }
-.block6 { background: #FF8C00; }
-
-/* Estilo cuando el bot controla la pieza */
-.bot-controlled {
-        box-shadow: 0 0 10px #00e5ff;
-}
-
-/* Indicador de modo de juego */
-.mode-indicator {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        background: rgba(0, 0, 0, 0.7);
-        color: white;
-        padding: 5px 10px;
-        border-radius: 4px;
-        font-size: 12px;
-        font-family: monospace;
-        z-index: 100;
-}
-
-/* Toggle para IA-ASSIST */
-.toggle-btn.active {
-        background-color: #00e5ff;
-        color: black;
-        font-weight: bold;
-}
-
-/* Toggle para Zen Mode */
-.toggle-btn.zen-active {
-        background-color: #ffaa00;
-        color: black;
-        font-weight: bold;
-}
-
-/* 🔘 ESTILOS PARA BOTONES ACTIVOS/INACTIVOS */
-.switch.active {
-        background-color: #00e5ff !important;
-        border-color: #00e5ff !important;
-        box-shadow: 0 0 10px rgba(0, 229, 255, 0.7);
-}
-
-#iaAssistToggle.active::after {
-        content: "ON";
-        color: black;
-        font-weight: bold;
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        font-size: 10px;
-}
-
-#zenToggle.active::after {
-        content: "ON";
-        color: black;
-        font-weight: bold;
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        font-size: 10px;
-}
-
-/* 🎮 ESTADO DEL JUEGO */
-.game-message.idle {
-        color: #aaa;
-        opacity: 0.8;
-}
-
-.game-message.active {
-        color: #00e5ff;
-        opacity: 1;
-        animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-        0% { opacity: 0.8; }
-        50% { opacity: 1; }
-        100% { opacity: 0.8; }
-}
-
-/* 👻 PREVIEW DEL BOT */
-.bot-ghost {
-        opacity: 0.3;
-        position: absolute;
-        pointer-events: none;
-        z-index: 5;
-        border: 1px dashed rgba(255, 255, 255, 0.5);
-}
-
-/* 📊 INDICADOR DE MODO */
-#mode-status {
-        background: rgba(0, 0, 0, 0.8);
-        color: white;
-        padding: 8px 12px;
-        border-radius: 6px;
-        font-size: 14px;
-        margin-top: 10px;
-        text-align: center;
-        border: 2px solid #444;
-        font-family: 'Courier New', monospace;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-}
-
-/* 🎯 BOTONES INTERACTIVOS */
-.btn-primary:hover, .btn-secondary:hover {
-        transform: translateY(-2px);
-        transition: transform 0.2s ease;
-}
-
-.btn-primary:active, .btn-secondary:active {
-        transform: translateY(0);
-}
-
-.keyboard-guide,
-.footer {
-        display: none !important;
-}
-
-/* Bloques de la pieza activa: RÍGIDOS (Sin transitions) */
-.active-block {
-    position: absolute;
-    width: var(--unit);
-    height: var(--unit);
-    box-sizing: border-box;
-    border: 1px solid rgba(0, 0, 0, 0.2);
-    z-index: 10;
-    /* transition: eliminada para simular NES */
-}
-
-/* Pantalla de Game Over (Modal) */
+/* Game Over Modal */
 #tetris-gameover {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    
-    background: var(--panel-bg);
-    border: 2px solid #000;
-    box-shadow: inset 2px 2px var(--panel-light), inset -2px -2px var(--panel-dark);
-    
+    background: #000;
+    border: 4px solid #fff;
+    color: #fff;
     padding: 20px;
     width: 250px;
-    z-index: 200; /* Por encima de todo */
-    
-    display: none; /* JS lo cambiará a 'flex' */
+    z-index: 200;
+    display: none;
     flex-direction: column;
     gap: 15px;
     align-items: center;
     text-align: center;
 }
 
-#tetris-gameover h2 {
-    color: #e74c3c; /* Rojo alerta */
-    font-size: 1.5rem;
-    text-shadow: 2px 2px 0px #000;
-    margin-bottom: 5px;
+#tetris-gameover h2 { color: #ff0000; }
+#tetris-gameover .final-score { color: #ffff00; }
+
+/* Bot Status */
+#bot-strategy-indicator {
+    background: #222;
+    border: 1px solid #555;
+    color: #0f0;
+    font-size: 0.6rem;
+    padding: 4px 8px;
+    text-align: center;
 }
 
-#tetris-gameover p {
-    font-size: 0.7rem;
-    line-height: 1.5;
+.bot-strategy.survival { color: #e74c3c; }
+.bot-strategy.tetris { color: #2ecc71; }
+.bot-strategy.attack { color: #f39c12; }
+.bot-strategy.balanced { color: #4a90e2; }
+.bot-strategy.zen { color: #9b59b6; }
+
+@keyframes blink-green {
+    0% { background-color: #222; color: #fff; border-color: #fff; }
+    50% { background-color: #00ff00; color: #000; border-color: #00ff00; box-shadow: 0 0 8px #00ff00; }
+    100% { background-color: #222; color: #fff; border-color: #fff; }
 }
 
-#tetris-gameover .final-score {
-    font-size: 1.1rem;
+.bot-thinking {
+    animation: blink-green 0.5s infinite;
     font-weight: bold;
-    color: #0050a4; /* Azul clásico */
-    margin: 5px 0;
+}
+
+.bot-idle {
+    background-color: #222;
+    color: #888;
+}
+
+.game-message {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 8px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid #555;
+    font-size: 0.6rem;
+    pointer-events: none;
+}
+
+.game-message.idle {
+    color: #aaa;
+    opacity: 0.8;
+}
+
+.game-message.active {
+    color: #00e5ff;
+    opacity: 1;
+}
+
+.keyboard-guide,
+.footer {
+    display: none !important;
 }

@@ -17,11 +17,11 @@ function syncBoardScale(gameInstance = null) {
 
   const wrapperHeight = wrapper.clientHeight;
   if (!wrapperHeight) return;
-  const dynamicUnit = wrapperHeight / ROWS;
+  const dynamicUnit = Math.floor(wrapperHeight / ROWS);
 
   document.documentElement.style.setProperty('--unit', `${dynamicUnit}px`);
   UNIT = dynamicUnit;
-  board.style.height = `${wrapperHeight}px`;
+  board.style.height = `${ROWS * dynamicUnit}px`;
   board.style.width = `${COLS * dynamicUnit}px`;
 
   if (gameInstance) {
@@ -193,6 +193,8 @@ class TetrisGame {
     this.iaAssist = false;
     this.paused = true;
     this.gameOver = false;
+    this.isAnimating = false;
+    this.rowsToClear = null;
     this.lastTime = 0;
 
     // SISTEMA DE CONTROL NES (Tiempos en milisegundos)
@@ -262,6 +264,7 @@ class TetrisGame {
   }
 
   spawnNewPiece() {
+    if (this.isAnimating) return;
     this.current = this.next || this.getNextPieceType();
     this.next = this.getNextPieceType();
     this.dasTimer = 0;
@@ -335,7 +338,7 @@ class TetrisGame {
 
       if (this.iaAssist) {
         // Solo pedimos movimiento si el juego NO está en Game Over y tenemos pieza
-        if (!this.gameOver && this.current) {
+        if (!this.gameOver && this.current && !this.isAnimating) {
             this.requestBotMove();
         }
       }
@@ -365,7 +368,7 @@ class TetrisGame {
       return;
     }
 
-    if (this.paused || this.gameOver || this.iaAssist) return;
+    if (this.paused || this.gameOver || this.iaAssist || this.isAnimating) return;
     const pieceReady = this.current && this.areTimer === 0;
 
     switch (event.key) {
@@ -445,19 +448,21 @@ class TetrisGame {
     for (let y = 0; y < ROWS; y++) {
       for (let x = 0; x < COLS; x++) {
         if (this.board[y][x] >= 0) {
-          this.createBlock(this.board[y][x], x, y);
+          const isExploding = this.isAnimating && this.rowsToClear && this.rowsToClear.includes(y);
+          const extraClass = isExploding ? 'destruct-anim' : '';
+          this.createBlock(this.board[y][x], x, y, extraClass);
         }
       }
     }
 
     // 3. Renderizar Ghost (si IA activa)
     // El ghost no necesita animación, así que usamos el método estándar
-    if (this.ghost && this.iaAssist) this.renderPieceGhost(this.ghost);
+    if (this.ghost && this.iaAssist && !this.isAnimating) this.renderPieceGhost(this.ghost);
 
     // 4. Actualizar visuales de la pieza activa
     // Aquí es donde ocurre la magia: solo cambiamos las coordenadas (top/left)
     // y los bloques se tele-transportan sin interpolación para reflejar el NES.
-    if (this.current) {
+    if (this.current && !this.isAnimating) {
       this.updateActivePieceVisuals();
     } else {
       this.hideActiveBlocks();
@@ -1072,35 +1077,92 @@ class TetrisGame {
   }
 
   lockPiece() {
-    // 1. Integrar pieza al Tablero (Entidad base del sistema)
+    if (this.isAnimating) return;
+    if (!this.current || !this.current.matrix) {
+      console.error('[AGENT] Pieza no disponible para bloquear.');
+      return;
+    }
+    if (!Array.isArray(this.board)) {
+      console.error('[AGENT] Tablero inválido, abortando bloqueo.');
+      return;
+    }
+
+    const placements = [];
+    let invalidPlacement = false;
+
     this.current.matrix.forEach((row, dy) => {
       row.forEach((val, dx) => {
+        if (!val) return;
         const ny = this.current.y + dy;
         const nx = this.current.x + dx;
-        if (val && ny >= 0 && ny < ROWS && nx >= 0 && nx < COLS) {
-          this.board[ny][nx] = this.current.typeId;
+        if (ny < 0 || ny >= ROWS || nx < 0 || nx >= COLS) {
+          invalidPlacement = true;
+          return;
         }
+        if (this.board[ny][nx] !== -1) {
+          invalidPlacement = true;
+          return;
+        }
+        placements.push({ x: nx, y: ny });
       });
     });
 
-    // 2. Limpieza de líneas (Reducción de entropía)
-    this.board = this.board.filter(row => row.some(cell => cell === -1));
-    const linesCleared = ROWS - this.board.length;
-    this.score += linesCleared * 100; // Puntuación simple
-    this.lines += linesCleared;
+    if (invalidPlacement) {
+      console.error('[AGENT] Colisión simulada o fuera de límites al bloquear pieza.');
+      this.paused = true;
+      this.gameOver = true;
+      this.stopTimer();
+      this.showGameOverScreen();
+      return;
+    }
+
+    placements.forEach(({ x, y }) => {
+      this.board[y][x] = this.current.typeId;
+    });
+
+    const rowsToClear = [];
+    for (let r = 0; r < ROWS; r++) {
+      if (this.board[r].every(cell => cell !== -1)) {
+        rowsToClear.push(r);
+      }
+    }
+
+    if (rowsToClear.length > 0) {
+      this.isAnimating = true;
+      this.rowsToClear = rowsToClear;
+      this.current = null;
+      this.render();
+
+      setTimeout(() => {
+        this.board = this.board.filter(row => row.some(cell => cell === -1));
+        const linesCleared = rowsToClear.length;
+        this.score += linesCleared * 100;
+        this.lines += linesCleared;
+
+        while (this.board.length < ROWS) {
+          this.board.unshift(Array(COLS).fill(-1));
+        }
+
+        this.finishTurn(linesCleared);
+      }, 400);
+    } else {
+      this.finishTurn(0);
+    }
+  }
+
+  finishTurn(linesCleared) {
+    this.isAnimating = false;
+    this.rowsToClear = null;
 
     document.getElementById('tetris-stats-lines').textContent = this.lines;
     document.getElementById('tetris-stats-score').textContent = this.score;
-    while (this.board.length < ROWS) {
-        this.board.unshift(Array(COLS).fill(-1));
-    }
+
     this.ghost = null;
     this.botPlan = null;
     this.botActionQueue = [];
     this.botActionTimer = 0;
     this.renderNext();
 
-    // 3. Generar nueva oportunidad
     this.current = null;
     this.areTimer = this.ARE_DELAY;
     this.fallAccumulator = 0;
@@ -1149,6 +1211,8 @@ class TetrisGame {
     this.spawnNewPiece();
     this.gameOver = false;
     this.paused = true;
+    this.isAnimating = false;
+    this.rowsToClear = null;
     const btn = document.getElementById('playBtn');
     if (btn) btn.textContent = '▶ Play';
     this.score = 0;
@@ -1182,11 +1246,11 @@ class TetrisGame {
       if (this.areTimer > 0) {
         this.areTimer = Math.max(0, this.areTimer - deltaTime);
       } else {
-        if (!this.current) {
+        if (!this.current && !this.isAnimating) {
           this.spawnNewPiece();
         }
 
-        if (this.current) {
+        if (this.current && !this.isAnimating) {
           if (this.iaAssist) {
             this.applyBotControl(deltaTime);
           }
