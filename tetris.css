@@ -272,8 +272,16 @@ button:active {
 }
 
 .destruct-anim {
-    animation: flash-destruct 0.4s forwards ease-out;
+    animation: flash-destruct 0.2s forwards ease-out;
     z-index: 100;
+}
+
+/* --- ANIMACIÓN PARPADEO TEXTO (Game Over) --- */
+@keyframes blink-text {
+    0% { opacity: 1; }
+    49% { opacity: 1; }
+    50% { opacity: 0; }
+    100% { opacity: 0; }
 }
 
 /* Ghost */
@@ -380,7 +388,10 @@ button:active {
     text-align: center;
 }
 
-#tetris-gameover h2 { color: #ff0000; }
+#tetris-gameover h2 {
+    color: #ff0000;
+    animation: blink-text 0.8s infinite;
+}
 #tetris-gameover .final-score { color: #ffff00; }
 
 /* Bot Status */

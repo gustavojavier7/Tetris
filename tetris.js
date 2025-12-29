@@ -194,6 +194,7 @@ class TetrisGame {
     this.paused = true;
     this.gameOver = false;
     this.isAnimating = false;
+    this.isGameOverAnimating = false;
     this.rowsToClear = null;
     this.lastTime = 0;
 
@@ -264,7 +265,7 @@ class TetrisGame {
   }
 
   spawnNewPiece() {
-    if (this.isAnimating) return;
+    if (this.isAnimating || this.isGameOverAnimating) return;
     this.current = this.next || this.getNextPieceType();
     this.next = this.getNextPieceType();
     this.dasTimer = 0;
@@ -279,15 +280,10 @@ class TetrisGame {
     this.current.matrix = this.current.shapes[0];
 
     if (this.collides(this.current.matrix, this.current.x, this.current.y)) {
-      this.gameOver = true;
-      this.paused = true;
-      this.stopTimer();
-      const btn = document.getElementById('playBtn');
-      if (btn) btn.textContent = '▶ Play';
-      this.showGameOverScreen();
+      this.triggerGameOver();
     }
 
-    if (this.gameOver) return;
+    if (this.gameOver || this.isGameOverAnimating) return;
 
     if (this.iaAssist) {
       this.releaseHorizontalKeys();
@@ -299,7 +295,7 @@ class TetrisGame {
     }
     this.ghost = null;
 
-    if (this.iaAssist) {
+    if (this.iaAssist && !this.isGameOverAnimating) {
       this.requestBotMove();
     }
     this.renderNext();
@@ -338,8 +334,8 @@ class TetrisGame {
 
       if (this.iaAssist) {
         // Solo pedimos movimiento si el juego NO está en Game Over y tenemos pieza
-        if (!this.gameOver && this.current && !this.isAnimating) {
-            this.requestBotMove();
+        if (!this.gameOver && this.current && !this.isAnimating && !this.isGameOverAnimating) {
+          this.requestBotMove();
         }
       }
       
@@ -368,7 +364,7 @@ class TetrisGame {
       return;
     }
 
-    if (this.paused || this.gameOver || this.iaAssist || this.isAnimating) return;
+    if (this.paused || this.gameOver || this.iaAssist || this.isAnimating || this.isGameOverAnimating) return;
     const pieceReady = this.current && this.areTimer === 0;
 
     switch (event.key) {
@@ -447,7 +443,9 @@ class TetrisGame {
     // Estas se dibujan de nuevo en cada frame (se podría optimizar, pero está bien así)
     for (let y = 0; y < ROWS; y++) {
       for (let x = 0; x < COLS; x++) {
-        if (this.board[y][x] >= 0) {
+        if (this.board[y][x] === -2) {
+          this.createBlock(0, x, y, 'destruct-anim');
+        } else if (this.board[y][x] >= 0) {
           const isExploding = this.isAnimating && this.rowsToClear && this.rowsToClear.includes(y);
           const extraClass = isExploding ? 'destruct-anim' : '';
           this.createBlock(this.board[y][x], x, y, extraClass);
@@ -457,12 +455,14 @@ class TetrisGame {
 
     // 3. Renderizar Ghost (si IA activa)
     // El ghost no necesita animación, así que usamos el método estándar
-    if (this.ghost && this.iaAssist && !this.isAnimating) this.renderPieceGhost(this.ghost);
+    if (this.ghost && this.iaAssist && !this.isAnimating && !this.isGameOverAnimating) {
+      this.renderPieceGhost(this.ghost);
+    }
 
     // 4. Actualizar visuales de la pieza activa
     // Aquí es donde ocurre la magia: solo cambiamos las coordenadas (top/left)
     // y los bloques se tele-transportan sin interpolación para reflejar el NES.
-    if (this.current && !this.isAnimating) {
+    if (this.current && !this.isAnimating && !this.isGameOverAnimating) {
       this.updateActivePieceVisuals();
     } else {
       this.hideActiveBlocks();
@@ -1077,7 +1077,7 @@ class TetrisGame {
   }
 
   lockPiece() {
-    if (this.isAnimating) return;
+    if (this.isAnimating || this.isGameOverAnimating) return;
     if (!this.current || !this.current.matrix) {
       console.error('[AGENT] Pieza no disponible para bloquear.');
       return;
@@ -1109,10 +1109,7 @@ class TetrisGame {
 
     if (invalidPlacement) {
       console.error('[AGENT] Colisión simulada o fuera de límites al bloquear pieza.');
-      this.paused = true;
-      this.gameOver = true;
-      this.stopTimer();
-      this.showGameOverScreen();
+      this.triggerGameOver();
       return;
     }
 
@@ -1169,7 +1166,58 @@ class TetrisGame {
     this.render();
   }
 
+  // --- NUEVA SECUENCIA DE GAME OVER ---
+  triggerGameOver() {
+    if (this.isGameOverAnimating) return;
+    this.gameOver = true;
+    this.paused = true;
+    this.isGameOverAnimating = true;
+    this.stopTimer();
+    this.hideActiveBlocks();
+    const btn = document.getElementById('playBtn');
+    if (btn) btn.textContent = '▶ Play';
+
+    this.runGameOverDestruction();
+  }
+
+  runGameOverDestruction() {
+    if (!this.isGameOverAnimating) return;
+    if (!Array.isArray(this.board)) {
+      console.error('[AGENT][GameOver] Tablero inválido, abortando destrucción.');
+      this.isGameOverAnimating = false;
+      this.showGameOverScreen();
+      return;
+    }
+
+    const occupied = [];
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        if (this.board[y][x] !== -1 && this.board[y][x] !== -2) {
+          occupied.push({ x, y });
+        }
+      }
+    }
+
+    if (occupied.length === 0) {
+      this.isGameOverAnimating = false;
+      this.showGameOverScreen();
+      return;
+    }
+
+    const idx = Math.floor(Math.random() * occupied.length);
+    const target = occupied[idx];
+    this.board[target.y][target.x] = -2;
+    this.render();
+
+    setTimeout(() => {
+      if (!this.isGameOverAnimating) return;
+      this.board[target.y][target.x] = -1;
+      this.runGameOverDestruction();
+    }, 20);
+  }
+
   togglePause() {
+    if (this.isGameOverAnimating) return;
     this.paused = !this.paused;
     const btn = document.getElementById('playBtn'); // Referencia al botón
 
@@ -1204,12 +1252,13 @@ class TetrisGame {
   reset() {
     const goScreen = document.getElementById('tetris-gameover');
     if (goScreen) goScreen.style.display = 'none';
+    this.gameOver = false;
+    this.isGameOverAnimating = false;
     this.board = Array.from({length: ROWS}, () => Array(COLS).fill(-1));
     this.bag = [];
     this.initBag();
     this.next = this.getNextPieceType();
     this.spawnNewPiece();
-    this.gameOver = false;
     this.paused = true;
     this.isAnimating = false;
     this.rowsToClear = null;
@@ -1242,15 +1291,15 @@ class TetrisGame {
     const deltaTime = this.lastTime ? time - this.lastTime : 0;
     this.lastTime = time;
 
-    if (!this.paused && !this.gameOver) {
+    if (!this.paused && !this.gameOver && !this.isGameOverAnimating) {
       if (this.areTimer > 0) {
         this.areTimer = Math.max(0, this.areTimer - deltaTime);
       } else {
-        if (!this.current && !this.isAnimating) {
+        if (!this.current && !this.isAnimating && !this.isGameOverAnimating) {
           this.spawnNewPiece();
         }
 
-        if (this.current && !this.isAnimating) {
+        if (this.current && !this.isAnimating && !this.isGameOverAnimating) {
           if (this.iaAssist) {
             this.applyBotControl(deltaTime);
           }
