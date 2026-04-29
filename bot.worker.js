@@ -472,6 +472,15 @@ function evaluateAndRankPlacements(board, placements) {
   }).sort((a, b) => a.score - b.score);
 }
 
+// Ranking ligero para el mini-beam ternario (sin BFS, sin topología)
+function rankPlacementsCheap(board, placements) {
+  return placements.map(p => {
+    const result = simulatePlacementAndClearLines(board, p);
+    if (!result) return { ...p, score: Infinity, resultBoard: null };
+    return { ...p, score: computeQuadraticHeight(result.board), resultBoard: result.board };
+  }).sort((a, b) => a.score - b.score);
+}
+
 /**
  * Clasifica un triplete de piezas como RED o BLUE.
  *
@@ -488,53 +497,30 @@ function evaluateAndRankPlacements(board, placements) {
  * @returns {'RED'|'BLUE'}
  */
 function evaluateTriplet(pieceA, pieceB, pieceC, board) {
-  // Nivel A
-  const placementsA = generatePlacements(board, pieceA);
-  if (placementsA.length === 0) return 'BLUE'; // tablero ya inviable
+  const topA = rankPlacementsCheap(board, generatePlacements(board, pieceA))
+    .slice(0, TERNARY_TOP_A)
+    .filter(p => p.resultBoard !== null);
 
-  const topA = evaluateAndRankPlacements(board, placementsA).slice(0, TERNARY_TOP_A);
-  const bestScores = [];
+  if (topA.length === 0) return 'BLUE';
 
   for (const pa of topA) {
-    const r1 = simulatePlacementAndClearLines(board, pa);
-    if (!r1) continue;
-
-    // Nivel B
-    const placementsB = generatePlacements(r1.board, pieceB);
-    if (placementsB.length === 0) continue;
-    const topB = evaluateAndRankPlacements(r1.board, placementsB).slice(0, TERNARY_TOP_B);
+    const topB = rankPlacementsCheap(pa.resultBoard, generatePlacements(pa.resultBoard, pieceB))
+      .slice(0, TERNARY_TOP_B)
+      .filter(p => p.resultBoard !== null);
 
     for (const pb of topB) {
-      const r2 = simulatePlacementAndClearLines(r1.board, pb);
-      if (!r2) continue;
-
-      // Nivel C
-      const placementsC = generatePlacements(r2.board, pieceC);
-      if (placementsC.length === 0) continue;
-      const topC = evaluateAndRankPlacements(r2.board, placementsC).slice(0, TERNARY_TOP_C);
+      const topC = rankPlacementsCheap(pb.resultBoard, generatePlacements(pb.resultBoard, pieceC))
+        .slice(0, TERNARY_TOP_C)
+        .filter(p => p.resultBoard !== null);
 
       for (const pc of topC) {
-        const r3 = simulatePlacementAndClearLines(r2.board, pc);
-        if (!r3) continue;
-
-        const topo = analyzeTopology(r3.board);
-
-        // Clasificacion directa: si hay cualquier region cerrada -> BLUE
-        if (topo.closedRVs.length > 0) {
-          bestScores.push('BLUE');
-        } else {
-          bestScores.push('RED');
-        }
+        // Solo aquí se hace el BFS completo — una vez por camino final
+        if (analyzeTopology(pc.resultBoard).closedRVs.length === 0) return 'RED';
       }
     }
   }
 
-  // Si no se pudo simular ningun camino completo -> BLUE (caso degenerado)
-  if (bestScores.length === 0) return 'BLUE';
-
-  // El triplete es RED solo si AL MENOS UN camino resulta limpio.
-  // Esto es conservador: un solo camino viable ya valida el triplete.
-  return bestScores.includes('RED') ? 'RED' : 'BLUE';
+  return 'BLUE';
 }
 // ================================================================
 // FIN RAMSEY TERNARIO
@@ -711,28 +697,11 @@ function planBestSequence(board, bagTypeIds) {
           wellColumn: context.wellColumn
         };
 
-        // --- SCORE ---
+        // --- SCORE (sin filtro ternario aun) ---
         let baseScore = context.strategy.evaluate(nextCandidate);
-
         if (USE_CLIQUE_BEAM) {
-          // Capa 1: penalizacion por densidad K4/K3 en el tablero actual
           baseScore = scoreRamseyHybrid(baseScore, nextBoard);
-
-          // Capa 2: filtro ternario -- penalizar si el futuro inmediato es BLUE
-          // Guard: solo si hay al menos 3 piezas adelante en la secuencia
-          if (i + 3 < sequence.length) {
-            const tripletColor = evaluateTriplet(
-              sequence[i + 1],
-              sequence[i + 2],
-              sequence[i + 3],
-              nextBoard
-            );
-            if (tripletColor === 'BLUE') {
-              baseScore += TERNARY_BLUE_PENALTY;
-            }
-          }
         }
-
         nextCandidate.score = baseScore;
         nextCandidates.push(nextCandidate);
       }
@@ -741,19 +710,38 @@ function planBestSequence(board, bagTypeIds) {
     if (nextCandidates.length === 0) break;
 
     nextCandidates.sort((a, b) => {
-      const scoreA = a.score ?? 0;
-      const scoreB = b.score ?? 0;
-      if (scoreA !== scoreB) return scoreA - scoreB;
+      if (a.score !== b.score) return a.score - b.score;
       if (a.quadraticHeight !== b.quadraticHeight) return a.quadraticHeight - b.quadraticHeight;
       return a.rugosidad - b.rugosidad;
     });
 
-    // --- FUSION: Cuotas de cliques vs slice top-N ---
-    if (USE_CLIQUE_BEAM) {
-      candidates = selectByCliqueQuotas(nextCandidates, BEAM_WIDTH);
-    } else {
-      candidates = nextCandidates.slice(0, BEAM_WIDTH);
+    // Reducir a BEAM_WIDTH primero
+    let surviving = USE_CLIQUE_BEAM
+      ? selectByCliqueQuotas(nextCandidates, BEAM_WIDTH)
+      : nextCandidates.slice(0, BEAM_WIDTH);
+
+    // Aplicar filtro ternario SOLO sobre supervivientes, con cache
+    if (USE_CLIQUE_BEAM && i + 3 < sequence.length) {
+      const ternaryCache = new Map();
+      const pA = sequence[i + 1], pB = sequence[i + 2], pC = sequence[i + 3];
+
+      surviving = surviving.map(c => {
+        const key = `${hashBitBoard(c.board)}_${pA}_${pB}_${pC}`;
+        let color = ternaryCache.get(key);
+        if (color === undefined) {
+          color = evaluateTriplet(pA, pB, pC, c.board);
+          ternaryCache.set(key, color);
+        }
+        return color === 'BLUE'
+          ? { ...c, score: c.score + TERNARY_BLUE_PENALTY }
+          : c;
+      });
+
+      // Reordenar solo si hubo penalizaciones
+      surviving.sort((a, b) => a.score - b.score);
     }
+
+    candidates = surviving;
   }
 
   const best = candidates[0];
