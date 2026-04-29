@@ -1,4 +1,4 @@
-// bot.worker.js - Worker de IA con modo FUSION (Ramsey + Clique Quotas)
+// bot.worker.js - Worker de IA con modo FUSION (Ramsey + Clique Quotas) + Filtro Ternario
 
 const COLS = 12;
 const ROWS = 22;
@@ -27,6 +27,18 @@ const QUOTA_WELL_DIV = 0.15;          // 15% diversidad de pozo
 const MAX_CLIQUE_K = 4;               // Tamano maximo de clique a buscar
 const RAMSEY_K4_WEIGHT = 35.0;        // Peso del bonus K4 en score hibrido
 const RAMSEY_K3_WEIGHT = 15.0;        // Peso del bonus K3 (L-shapes)
+// ================================================================
+// RAMSEY TERNARIO: Analisis de tripletes en la secuencia
+// ================================================================
+// Penalizacion aplicada al score cuando el triplete siguiente es BLUE.
+// Calibrado en relacion a scoreRamseyHybrid (max impacto ~50):
+// 80 puntos demota el candidato sin excluirlo completamente del beam.
+const TERNARY_BLUE_PENALTY = 80.0;
+
+// Profundidad del mini-beam interno del filtro ternario (top-A x top-B x top-C)
+const TERNARY_TOP_A = 3;
+const TERNARY_TOP_B = 2;
+const TERNARY_TOP_C = 1;
 // ================================================================
 
 const PIECE_MASKS = buildPieceMasks(TETROMINOS);
@@ -430,6 +442,105 @@ function selectByCliqueQuotas(sortedCandidates, beamWidth) {
 }
 
 // ================================================================
+// RAMSEY TERNARIO: Funciones de soporte
+// ================================================================
+
+/**
+ * Evalua un tablero con pesos fijos DEFAULT.
+ * Se usa internamente en el filtro ternario (independiente de la
+ * estrategia activa) para que el lookahead sea neutral y estable.
+ */
+function evaluateBoardMetrics(metrics) {
+  return metrics.quadraticHeight * 1.0 +
+         metrics.geometric.rugosidad * 0.4 +
+         metrics.A_closed_total * 4.0 +
+         metrics.burialScore * 1.5 -
+         metrics.A_open * 0.05;
+}
+
+/**
+ * Dado un tablero y una lista de placements, devuelve los placements
+ * ordenados de mejor a peor segun evaluateBoardMetrics.
+ * Los placements invalidos (simulacion fallida) quedan al final con score Infinity.
+ */
+function evaluateAndRankPlacements(board, placements) {
+  return placements.map(p => {
+    const result = simulatePlacementAndClearLines(board, p);
+    if (!result) return { ...p, score: Infinity };
+    const metrics = computeStateMetrics(analyzeTopology(result.board), result.board);
+    return { ...p, score: evaluateBoardMetrics(metrics), resultBoard: result.board };
+  }).sort((a, b) => a.score - b.score);
+}
+
+/**
+ * Clasifica un triplete de piezas como RED o BLUE.
+ *
+ * RED  -> el mejor camino posible para las 3 piezas no genera huecos cerrados.
+ * BLUE -> incluso jugando de forma optima, el triplete genera regiones cerradas.
+ *
+ * El mini-beam interno es acotado (TERNARY_TOP_A x TOP_B x TOP_C = 3x2x1 = 6 caminos),
+ * por lo que el costo computacional es bajo y no bloquea el beam principal.
+ *
+ * @param {number} pieceA  typeId de la primera pieza del triplete
+ * @param {number} pieceB  typeId de la segunda pieza
+ * @param {number} pieceC  typeId de la tercera pieza
+ * @param {Uint16Array} board  tablero bitboard en el momento de evaluacion
+ * @returns {'RED'|'BLUE'}
+ */
+function evaluateTriplet(pieceA, pieceB, pieceC, board) {
+  // Nivel A
+  const placementsA = generatePlacements(board, pieceA);
+  if (placementsA.length === 0) return 'BLUE'; // tablero ya inviable
+
+  const topA = evaluateAndRankPlacements(board, placementsA).slice(0, TERNARY_TOP_A);
+  const bestScores = [];
+
+  for (const pa of topA) {
+    const r1 = simulatePlacementAndClearLines(board, pa);
+    if (!r1) continue;
+
+    // Nivel B
+    const placementsB = generatePlacements(r1.board, pieceB);
+    if (placementsB.length === 0) continue;
+    const topB = evaluateAndRankPlacements(r1.board, placementsB).slice(0, TERNARY_TOP_B);
+
+    for (const pb of topB) {
+      const r2 = simulatePlacementAndClearLines(r1.board, pb);
+      if (!r2) continue;
+
+      // Nivel C
+      const placementsC = generatePlacements(r2.board, pieceC);
+      if (placementsC.length === 0) continue;
+      const topC = evaluateAndRankPlacements(r2.board, placementsC).slice(0, TERNARY_TOP_C);
+
+      for (const pc of topC) {
+        const r3 = simulatePlacementAndClearLines(r2.board, pc);
+        if (!r3) continue;
+
+        const topo = analyzeTopology(r3.board);
+
+        // Clasificacion directa: si hay cualquier region cerrada -> BLUE
+        if (topo.closedRVs.length > 0) {
+          bestScores.push('BLUE');
+        } else {
+          bestScores.push('RED');
+        }
+      }
+    }
+  }
+
+  // Si no se pudo simular ningun camino completo -> BLUE (caso degenerado)
+  if (bestScores.length === 0) return 'BLUE';
+
+  // El triplete es RED solo si AL MENOS UN camino resulta limpio.
+  // Esto es conservador: un solo camino viable ya valida el triplete.
+  return bestScores.includes('RED') ? 'RED' : 'BLUE';
+}
+// ================================================================
+// FIN RAMSEY TERNARIO
+// ================================================================
+
+// ================================================================
 // FIN FUSION
 // ================================================================
 
@@ -529,7 +640,7 @@ function determineStrategyContext(board, topology, metrics) {
 }
 
 // ================================================================
-// PLAN BEST SEQUENCE - Integracion FUSION
+// PLAN BEST SEQUENCE - Integracion FUSION + Filtro Ternario
 // ================================================================
 
 function planBestSequence(board, bagTypeIds) {
@@ -602,9 +713,26 @@ function planBestSequence(board, bagTypeIds) {
 
         // --- SCORE ---
         let baseScore = context.strategy.evaluate(nextCandidate);
+
         if (USE_CLIQUE_BEAM) {
+          // Capa 1: penalizacion por densidad K4/K3 en el tablero actual
           baseScore = scoreRamseyHybrid(baseScore, nextBoard);
+
+          // Capa 2: filtro ternario -- penalizar si el futuro inmediato es BLUE
+          // Guard: solo si hay al menos 3 piezas adelante en la secuencia
+          if (i + 3 < sequence.length) {
+            const tripletColor = evaluateTriplet(
+              sequence[i + 1],
+              sequence[i + 2],
+              sequence[i + 3],
+              nextBoard
+            );
+            if (tripletColor === 'BLUE') {
+              baseScore += TERNARY_BLUE_PENALTY;
+            }
+          }
         }
+
         nextCandidate.score = baseScore;
         nextCandidates.push(nextCandidate);
       }
