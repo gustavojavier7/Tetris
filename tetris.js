@@ -1222,15 +1222,18 @@ class TetrisGame {
     const btn = document.getElementById('playBtn'); // Referencia al botón
 
     if (this.paused) {
+      document.getElementById('gameMessage')?.style.setProperty('display', 'block');
       this.pauseTimer();
       if (btn) btn.textContent = '▶ Play'; // Cambio visual a Play
     } else if (!this.gameOver) {
+      document.getElementById('gameMessage')?.style.setProperty('display', 'none');
       this.resumeTimer();
       if (btn) btn.textContent = '⏸ Pause'; // Cambio visual a Pause
     }
   }
 
   showGameOverScreen() {
+    document.getElementById('gameMessage')?.style.setProperty('display', 'block');
     const el = document.getElementById('tetris-gameover');
     if (!el) return;
 
@@ -1252,6 +1255,7 @@ class TetrisGame {
   reset() {
     const goScreen = document.getElementById('tetris-gameover');
     if (goScreen) goScreen.style.display = 'none';
+    document.getElementById('gameMessage')?.style.setProperty('display', 'block');
     this.gameOver = false;
     this.isGameOverAnimating = false;
     this.board = Array.from({length: ROWS}, () => Array(COLS).fill(-1));

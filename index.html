@@ -25,16 +25,8 @@
                         <div class="value" id="tetris-stats-score">0</div>
                     </div>
                     <div class="stat-card">
-                        <label>Level</label>
-                        <div class="value" id="tetris-stats-level">1</div>
-                    </div>
-                    <div class="stat-card">
                         <label>Lines</label>
                         <div class="value" id="tetris-stats-lines">0</div>
-                    </div>
-                    <div class="stat-card">
-                        <label>APM</label>
-                        <div class="value" id="tetris-stats-apm">0</div>
                     </div>
                 </div>
 
@@ -48,21 +40,10 @@
                     <button class="btn-secondary" id="newGameBtn">↻ New Game</button>
                 </div>
 
-                <div class="win95-block settings-panel">
-                    <div class="settings-header">
-                        <p>Game Modes</p>
-                        <button class="toggle-btn" title="Settings">⚙️</button>
-                    </div>
-
-                    <div class="mode-switches" id="modeList">
-                        <div class="switch-group">
-                            <label for="iaAssistToggle">IA-ASSIST</label>
-                            <button type="button" class="switch" id="iaAssistToggle"></button>
-                        </div>
-                        <div class="switch-group">
-                            <label for="zenToggle">Zen Mode</label>
-                            <button type="button" class="switch" id="zenToggle"></button>
-                        </div>
+                <div class="win95-block mode-switches">
+                    <div class="switch-group">
+                        <label for="iaAssistToggle">IA-ASSIST</label>
+                        <button type="button" class="switch" id="iaAssistToggle"></button>
                     </div>
                 </div>
 
@@ -70,12 +51,11 @@
                     <div class="bot-settings-header" style="text-align: center; margin-bottom: 5px;">
                         🤖 IA MODE
                     </div>
-                    <div id="bot-strategy-indicator" class="bot-strategy balanced" style="font-size: 0.65rem; padding: 6px; border: 2px inset #fff; background: #222; text-align: center;">
+                    <div id="bot-strategy-indicator" class="bot-strategy balanced">
                         ANALIZANDO...
                     </div>
                 </div>
 
-                <button class="btn-secondary" id="audioBtn">🔊 Sound On</button>
             </div>
             <div class="game-section">
                 <div class="left-column" style="display: flex; flex-direction: column; gap: 10px;">
@@ -103,25 +83,6 @@
                     </div>
                 </div>
             </div>
-        </div>
-
-        <div id="tetris-keys" style="display: none;"></div>
-
-        <div style="display: none;">
-            <div id="tetris-help"></div>
-            <div id="tetris-highscores">
-                <div id="tetris-highscores-content"></div>
-                <span id="tetris-highscores-close"></span>
-            </div>
-            <span id="tetris-help-close"></span>
-
-            <button id="tetris-menu-start"></button>
-            <div id="tetris-pause"><button id="tetris-menu-pause"></button></div>
-            <div id="tetris-resume"><button id="tetris-menu-resume"></button></div>
-            <button id="tetris-menu-help"></button>
-            <button id="tetris-menu-highscores"></button>
-
-            <input type="checkbox" id="tetris-zen-mode">
         </div>
 
         <div id="tetris-gameover" style="display:none;"></div>
