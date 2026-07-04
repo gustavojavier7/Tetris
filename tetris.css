@@ -5,25 +5,40 @@
     --area-x: 12;
     --area-y: 22;
 
-    /* Paleta clara */
-    --bg:        #f4f4f2;   /* no #fff puro: encandila con Press Start 2P */
-    --panel:     #ffffff;
-    --panel-2:   #fafafa;
-    --border:    #222222;   /* borde oscuro grueso = ADN arcade */
-    --text:      #1a1a1a;
-    --text-dim:  #555555;
-    --accent:    #3949ab;   /* PARAM_ACCENT */
-    --accent-2:  #00838f;   /* teal: reemplaza el cyan #00e5ff */
-    --log:       #1a7f37;   /* verde legible en claro */
-    --danger:    #d32f2f;
-    --grid-line: rgba(0, 0, 0, 0.08);
+    /* Superficie Win98 */
+    --win-face:     #c0c0c0;
+    --win-hl:       #ffffff;
+    --win-light:    #dfdfdf;
+    --win-shadow:   #808080;
+    --win-dark:     #000000;
 
-    /* Alias de compatibilidad (reglas viejas siguen funcionando) */
-    --bg-color:     var(--bg);
-    --panel-border: var(--border);
+    /* Barra de título (Win98 = degradé) */
+    --title-1:      #000080;
+    --title-2:      #1084d0;
+    --title-text:   #ffffff;
+    --title-inactive-1: #808080;
+    --title-inactive-2: #b5b5b5;
+
+    /* Contenido */
+    --text:         #000000;
+    --text-dim:     #404040;
+    --accent:       #000080;
+    --accent-2:     #008080;
+    --log:          #008000;
+    --danger:       #aa0000;
+    --disabled:     #808080;
+    --grid-line:    rgba(0, 0, 0, 0.12);
+    --desktop:      #008080;
+
+    /* Alias de compatibilidad */
+    --bg:           var(--desktop);
+    --panel:        var(--win-face);
+    --panel-2:      var(--win-face);
+    --border:       var(--win-dark);
+    --bg-color:     var(--desktop);
+    --panel-border: var(--win-dark);
     --text-color:   var(--text);
 }
-
 * {
     margin: 0;
     padding: 0;
@@ -465,3 +480,221 @@ button:active {
 .footer {
     display: none !important;
 }
+
+/* --- Windows 98 chrome consolidation --- */
+body { background: var(--desktop); }
+
+.container { max-width: 1120px; gap: 8px; }
+
+.win98-window {
+    background: var(--win-face);
+    padding: 2px;
+    box-shadow:
+        inset -1px -1px 0 0 var(--win-dark),
+        inset  1px  1px 0 0 var(--win-hl),
+        inset -2px -2px 0 0 var(--win-shadow),
+        inset  2px  2px 0 0 var(--win-light);
+}
+
+.win98-titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    padding: 2px 2px 2px 4px;
+    background: linear-gradient(90deg, var(--title-1), var(--title-2));
+    color: var(--title-text);
+    font-size: 0.45rem;
+    line-height: 1.4;
+    text-transform: none;
+}
+.win98-titlebar .title { display: flex; align-items: center; gap: 4px; }
+.win98-titlebar .win-btns { display: flex; gap: 2px; }
+.win98-titlebar .win-btns button {
+    width: 16px;
+    height: 14px;
+    padding: 0;
+    font-size: 0.5rem;
+    line-height: 1;
+    background: var(--win-face);
+    color: var(--disabled);
+    box-shadow:
+        inset -1px -1px 0 0 var(--win-dark),
+        inset  1px  1px 0 0 var(--win-hl),
+        inset -2px -2px 0 0 var(--win-shadow),
+        inset  2px  2px 0 0 var(--win-light);
+    opacity: 0.55;
+    pointer-events: none;
+    cursor: default;
+}
+.win98-client { padding: 8px; }
+.win98-inset {
+    background: var(--win-face);
+    box-shadow:
+        inset  1px  1px 0 0 var(--win-dark),
+        inset -1px -1px 0 0 var(--win-hl),
+        inset  2px  2px 0 0 var(--win-shadow),
+        inset -2px -2px 0 0 var(--win-light);
+}
+.win98-statusbar {
+    margin: 4px 2px 2px;
+    padding: 2px 6px;
+    font-size: 0.45rem;
+    color: var(--text);
+    box-shadow:
+        inset  1px  1px 0 0 var(--win-shadow),
+        inset -1px -1px 0 0 var(--win-hl);
+}
+
+.main-grid { grid-template-columns: 300px 1fr; gap: 8px; }
+.control-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    padding: 8px;
+}
+.game-section {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: transparent;
+    border: none;
+    padding: 8px;
+    gap: 0;
+}
+
+.stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+.timer-box { grid-column: 1 / -1; }
+.stat-card .value,
+.timer-box .value {
+    padding: 8px 6px;
+    margin-top: 5px;
+    min-height: 28px;
+}
+.control-stack,
+.controls,
+.mode-switches,
+.bot-settings { display: flex; flex-direction: column; gap: 8px; }
+.bot-settings-header { text-align: center; margin-bottom: 0; color: var(--text-dim); font-size: 0.5rem; }
+.switch-group { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.55rem; }
+
+button {
+    border: none;
+    background: var(--win-face);
+    color: var(--text);
+    box-shadow:
+        inset -1px -1px 0 0 var(--win-dark),
+        inset  1px  1px 0 0 var(--win-hl),
+        inset -2px -2px 0 0 var(--win-shadow),
+        inset  2px  2px 0 0 var(--win-light);
+}
+button:hover { background: var(--win-light); }
+button:active {
+    background: var(--win-face);
+    box-shadow:
+        inset  1px  1px 0 0 var(--win-dark),
+        inset -1px -1px 0 0 var(--win-hl),
+        inset  2px  2px 0 0 var(--win-shadow),
+        inset -2px -2px 0 0 var(--win-light);
+}
+.btn-primary, .btn-secondary { color: var(--text); }
+
+.switch {
+    border: none;
+    box-shadow:
+        inset  1px  1px 0 0 var(--win-dark),
+        inset -1px -1px 0 0 var(--win-hl),
+        inset  2px  2px 0 0 var(--win-shadow),
+        inset -2px -2px 0 0 var(--win-light);
+}
+.switch::after { background: var(--win-light); }
+.switch.active { border-color: transparent !important; background-color: var(--win-face) !important; }
+.switch.active::after { background: var(--accent-2); }
+
+.tetris-window { width: max-content; }
+.game-board-wrapper { height: calc(var(--unit) * var(--area-y)); background: transparent; }
+.game-board {
+    border: none;
+    box-shadow:
+        inset  1px  1px 0 0 var(--win-dark),
+        inset -1px -1px 0 0 var(--win-hl),
+        inset  2px  2px 0 0 var(--win-shadow),
+        inset -2px -2px 0 0 var(--win-light);
+}
+.game-grid { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.inline-next-piece,
+.log-panel {
+    width: 100%;
+    border: none;
+    padding: 2px;
+    align-self: auto;
+    display: block;
+    font-family: inherit;
+}
+.inline-next-piece p,
+.log-panel p { display: none; }
+.next-piece-box {
+    width: calc(var(--unit) * 6);
+    height: calc(var(--unit) * 5);
+    transform: none;
+    transform-origin: initial;
+    position: relative;
+    margin: 0 auto;
+}
+.log-content {
+    height: 100px;
+    padding: 6px;
+    color: var(--log);
+}
+.log-entry.solid { border-color: var(--log); color: var(--log); }
+.log-entry.broken { border-color: var(--danger); color: var(--danger); }
+
+#bot-strategy-indicator {
+    border: none;
+    color: var(--log);
+    padding: 6px 8px;
+}
+.bot-strategy.balanced { color: var(--log); }
+.bot-idle { background-color: var(--win-face); color: var(--text-dim); }
+@keyframes blink-green {
+    0% { background: var(--win-face); color: var(--text); }
+    50% { background: #00ff00; color: #000000; box-shadow: 0 0 8px #00ff00; }
+    100% { background: var(--win-face); color: var(--text); }
+}
+
+.game-message {
+    background: var(--win-face);
+    border: none;
+    box-shadow:
+        inset  1px  1px 0 0 var(--win-dark),
+        inset -1px -1px 0 0 var(--win-hl);
+    text-align: center;
+}
+
+#tetris-gameover {
+    border: none;
+    padding: 22px 12px 12px;
+    background: var(--win-face);
+    box-shadow:
+        inset -1px -1px 0 0 var(--win-dark),
+        inset  1px  1px 0 0 var(--win-hl),
+        inset -2px -2px 0 0 var(--win-shadow),
+        inset  2px  2px 0 0 var(--win-light);
+}
+#tetris-gameover::before {
+    content: 'Game Over';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    right: 2px;
+    padding: 2px 4px;
+    background: linear-gradient(90deg, var(--title-1), var(--title-2));
+    color: var(--title-text);
+    font-size: 0.45rem;
+    text-align: left;
+}
+#tetris-gameover .final-score { color: var(--accent); }
