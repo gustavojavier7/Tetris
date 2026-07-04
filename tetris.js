@@ -517,18 +517,26 @@ class TetrisGame {
   }
 
   renderNext() {
+    if (!this.nextBox) {
+      console.warn('[AGENT][renderNext] Fast-Fail: contenedor #tetris-nextpuzzle no disponible.');
+      return;
+    }
     this.nextBox.innerHTML = '';
     if (!this.next) return;
     const matrix = this.next.shapes[0];
-    const offsetX = 2 - Math.floor(matrix[0].length / 2);
-    const offsetY = 2 - Math.floor(matrix.length / 2);
+    const w = matrix[0].length;
+    const h = matrix.length;
+    const COLS_BOX = 6;
+    const ROWS_BOX = 5;
+    const offsetX = (COLS_BOX - w) / 2;
+    const offsetY = (ROWS_BOX - h) / 2;
     matrix.forEach((row, dy) => {
       row.forEach((val, dx) => {
         if (val) {
           const div = document.createElement('div');
           div.className = BLOCK_CLASSES[this.next.typeId];
-          div.style.left = `${(dx + offsetX + 1) * UNIT}px`;
-          div.style.top = `${(dy + offsetY + 1) * UNIT}px`;
+          div.style.left = `${(dx + offsetX) * UNIT}px`;
+          div.style.top = `${(dy + offsetY) * UNIT}px`;
           this.nextBox.appendChild(div);
         }
       });
