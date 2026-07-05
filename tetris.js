@@ -20,22 +20,29 @@ function syncBoardScale(gameInstance = null) {
 
   if (!wrapperHeight || !wrapperWidth) return;
 
-  // Prioridad: altura máxima, pero nunca exceder el ancho disponible.
-  let dynamicUnit = Math.floor(wrapperHeight / ROWS);
-
-  // Limitar si el ancho no alcanza (evita overflow horizontal).
-  const maxByWidth = Math.floor(wrapperWidth / COLS);
-  if (dynamicUnit > maxByWidth) {
-    dynamicUnit = maxByWidth;
-  }
+  // Cálculo que prioriza llenar el espacio disponible
+  let dynamicUnit = Math.floor(Math.min(
+    wrapperHeight / ROWS,
+    wrapperWidth / COLS
+  ));
 
   dynamicUnit = Math.max(1, dynamicUnit);
 
   document.documentElement.style.setProperty('--unit', `${dynamicUnit}px`);
   UNIT = dynamicUnit;
 
+  // Forzar tamaño completo del tablero
   board.style.height = `${ROWS * dynamicUnit}px`;
   board.style.width = `${COLS * dynamicUnit}px`;
+  board.style.maxHeight = 'none';
+  board.style.maxWidth = 'none';
+
+  // Asegurar que la grilla de fondo también se expanda
+  const gameGrid = document.getElementById('gameGrid');
+  if (gameGrid) {
+    gameGrid.style.height = `${ROWS * dynamicUnit}px`;
+    gameGrid.style.width = `${COLS * dynamicUnit}px`;
+  }
 
   if (gameInstance) {
     gameInstance.render();
