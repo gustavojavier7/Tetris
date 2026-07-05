@@ -17,11 +17,23 @@ function syncBoardScale(gameInstance = null) {
 
   const wrapperHeight = wrapper.clientHeight;
   const wrapperWidth = wrapper.clientWidth;
+
   if (!wrapperHeight || !wrapperWidth) return;
-  const dynamicUnit = Math.max(1, Math.floor(Math.min(wrapperHeight / ROWS, wrapperWidth / COLS)));
+
+  // Prioridad: altura máxima, pero nunca exceder el ancho disponible.
+  let dynamicUnit = Math.floor(wrapperHeight / ROWS);
+
+  // Limitar si el ancho no alcanza (evita overflow horizontal).
+  const maxByWidth = Math.floor(wrapperWidth / COLS);
+  if (dynamicUnit > maxByWidth) {
+    dynamicUnit = maxByWidth;
+  }
+
+  dynamicUnit = Math.max(1, dynamicUnit);
 
   document.documentElement.style.setProperty('--unit', `${dynamicUnit}px`);
   UNIT = dynamicUnit;
+
   board.style.height = `${ROWS * dynamicUnit}px`;
   board.style.width = `${COLS * dynamicUnit}px`;
 
