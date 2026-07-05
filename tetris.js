@@ -30,8 +30,8 @@ function syncBoardScale(gameInstance = null) {
 
   // Obtener dimensiones reales del wrapper después de layout.
   const wrapperRect = wrapper.getBoundingClientRect();
-  const availableWidth = wrapperRect.width - 8; // Restar padding/bordes.
-  const availableHeight = wrapperRect.height - 8;
+  const availableWidth = wrapperRect.width - 20; // Margen para padding y sombra Win98.
+  const availableHeight = wrapperRect.height - 20;
 
   if (availableWidth <= 0 || availableHeight <= 0) return;
 
@@ -1406,6 +1406,7 @@ class TetrisGame {
 window.addEventListener('load', () => {
   syncBoardScale();
   const game = new TetrisGame();
+  requestAnimationFrame(() => syncBoardScale(game));
 
   window.addEventListener('resize', () => {
     clearTimeout(window.resizeTimer);
