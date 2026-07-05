@@ -16,8 +16,9 @@ function syncBoardScale(gameInstance = null) {
   if (!wrapper || !board) return;
 
   const wrapperHeight = wrapper.clientHeight;
-  if (!wrapperHeight) return;
-  const dynamicUnit = Math.floor(wrapperHeight / ROWS);
+  const wrapperWidth = wrapper.clientWidth;
+  if (!wrapperHeight || !wrapperWidth) return;
+  const dynamicUnit = Math.max(1, Math.floor(Math.min(wrapperHeight / ROWS, wrapperWidth / COLS)));
 
   document.documentElement.style.setProperty('--unit', `${dynamicUnit}px`);
   UNIT = dynamicUnit;

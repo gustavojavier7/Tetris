@@ -102,6 +102,8 @@ body {
     grid-template-columns: 300px 1fr;
     gap: 20px;
     min-height: 0;
+    height: 100%;
+    align-items: stretch;
 }
 
 /* Paneles Laterales */
@@ -223,8 +225,11 @@ button:active {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     background: var(--panel);
+    padding: 10px;
+    box-sizing: border-box;
 }
 
 .game-board {
@@ -234,8 +239,10 @@ button:active {
     overflow: hidden;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
     display: flex;
-    align-items: stretch;
+    align-items: center;
     justify-content: center;
+    max-height: 100%;
+    max-width: 100%;
 }
 
 .game-grid {
@@ -559,7 +566,9 @@ body { background: var(--desktop); }
 .game-section {
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: stretch;
+    height: 100%;
+    min-height: 0;
     background: transparent;
     border: none;
     padding: 8px;
@@ -614,8 +623,19 @@ button:active {
 .switch.active { border-color: transparent !important; background-color: var(--win-face) !important; }
 .switch.active::after { background: var(--accent-2); }
 
-.tetris-window { width: max-content; }
-.game-board-wrapper { height: calc(var(--unit) * var(--area-y)); background: transparent; }
+.tetris-window {
+    display: flex;
+    flex-direction: column;
+    width: max-content;
+    height: 100%;
+    max-height: 100%;
+}
+.tetris-window .win98-client {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+.game-board-wrapper { background: transparent; }
 .game-board {
     border: none;
     box-shadow:
