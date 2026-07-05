@@ -757,6 +757,9 @@ button:active {
 }
 
 .game-board {
-    border: 3px solid var(--win-dark);
-    box-shadow: 0 0 25px rgba(0, 0, 0, 0.6);
+    box-shadow:
+        inset 3px 3px 0 0 var(--win-dark),
+        inset -3px -3px 0 0 var(--win-light),
+        inset 6px 6px 0 0 var(--win-shadow),
+        inset -6px -6px 0 0 var(--win-hl);
 }
