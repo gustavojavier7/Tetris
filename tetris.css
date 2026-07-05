@@ -724,24 +724,31 @@ button:active {
 }
 #tetris-gameover .final-score { color: var(--accent); }
 
-/* --- Full viewport board scaling overrides --- */
+/* === LAYOUT FULL-WIDTH === */
 .container {
     max-width: none !important;
-    width: 100vw;
-    height: 100vh;
+    width: 100vw !important;
+    height: 100vh !important;
     padding: 8px;
+    margin: 0;
     box-sizing: border-box;
 }
 
 .main-grid {
-    grid-template-columns: 280px 1fr;
+    grid-template-columns: 320px 1fr;
     gap: 12px;
+    height: calc(100vh - 16px);
+    align-items: stretch;
 }
 
 .game-section {
-    flex: 1;
-    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     height: 100%;
+    min-height: 0;
+    background: transparent;
+    padding: 0;
 }
 
 .game-board-wrapper {
@@ -751,9 +758,10 @@ button:active {
     justify-content: center;
     width: 100%;
     height: 100%;
-    padding: 6px;
+    padding: 8px;
     background: transparent;
     overflow: hidden;
+    box-sizing: border-box;
 }
 
 .game-board {
@@ -762,4 +770,5 @@ button:active {
         inset -3px -3px 0 0 var(--win-light),
         inset 6px 6px 0 0 var(--win-shadow),
         inset -6px -6px 0 0 var(--win-hl);
+    border: none;
 }
