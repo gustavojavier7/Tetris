@@ -13,35 +13,49 @@ document.documentElement.style.setProperty('--area-y', ROWS);
 function syncBoardScale(gameInstance = null) {
   const wrapper = document.querySelector('.game-board-wrapper');
   const board = document.querySelector('.game-board');
+  const gameSection = document.querySelector('.game-section');
+
   if (!wrapper || !board) return;
 
-  const wrapperHeight = wrapper.clientHeight;
-  const wrapperWidth = wrapper.clientWidth;
+  // Forzar que el wrapper use TODO el espacio disponible.
+  wrapper.style.width = '100%';
+  wrapper.style.height = '100%';
+  wrapper.style.padding = '4px'; // Mínimo para el borde win98.
 
-  if (!wrapperHeight || !wrapperWidth) return;
+  // Asegurar que la sección también tenga una altura útil antes de medir.
+  if (gameSection) {
+    gameSection.style.height = '100%';
+    gameSection.style.minHeight = '0';
+  }
 
-  // Cálculo que prioriza llenar el espacio disponible
-  let dynamicUnit = Math.floor(Math.min(
-    wrapperHeight / ROWS,
-    wrapperWidth / COLS
-  ));
+  // Obtener dimensiones reales del wrapper después de layout.
+  const wrapperRect = wrapper.getBoundingClientRect();
+  const availableWidth = wrapperRect.width - 8; // Restar padding/bordes.
+  const availableHeight = wrapperRect.height - 8;
 
-  dynamicUnit = Math.max(1, dynamicUnit);
+  if (availableWidth <= 0 || availableHeight <= 0) return;
+
+  // Calcular unit para llenar al máximo manteniendo proporción.
+  const unitByWidth = Math.floor(availableWidth / COLS);
+  const unitByHeight = Math.floor(availableHeight / ROWS);
+
+  let dynamicUnit = Math.min(unitByWidth, unitByHeight);
+  dynamicUnit = Math.max(12, dynamicUnit); // Mínimo razonable para legibilidad.
 
   document.documentElement.style.setProperty('--unit', `${dynamicUnit}px`);
   UNIT = dynamicUnit;
 
-  // Forzar tamaño completo del tablero
-  board.style.height = `${ROWS * dynamicUnit}px`;
+  // Forzar tamaño exacto del tablero.
   board.style.width = `${COLS * dynamicUnit}px`;
-  board.style.maxHeight = 'none';
+  board.style.height = `${ROWS * dynamicUnit}px`;
   board.style.maxWidth = 'none';
+  board.style.maxHeight = 'none';
 
-  // Asegurar que la grilla de fondo también se expanda
+  // Asegurar que la grilla de fondo también coincida.
   const gameGrid = document.getElementById('gameGrid');
   if (gameGrid) {
-    gameGrid.style.height = `${ROWS * dynamicUnit}px`;
     gameGrid.style.width = `${COLS * dynamicUnit}px`;
+    gameGrid.style.height = `${ROWS * dynamicUnit}px`;
   }
 
   if (gameInstance) {
@@ -1392,5 +1406,12 @@ class TetrisGame {
 window.addEventListener('load', () => {
   syncBoardScale();
   const game = new TetrisGame();
-  window.addEventListener('resize', () => syncBoardScale(game));
+
+  window.addEventListener('resize', () => {
+    clearTimeout(window.resizeTimer);
+    window.resizeTimer = setTimeout(() => syncBoardScale(game), 50);
+  });
+
+  window.addEventListener('orientationchange', () => syncBoardScale(game));
+  document.addEventListener('fullscreenchange', () => syncBoardScale(game));
 });
