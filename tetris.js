@@ -2,18 +2,19 @@
 
 const COLS = 12;
 const ROWS = 22;
-let UNIT = 20; // Coincide con --unit en CSS y se ajusta al alto del contenedor
 
 const PIECE_TYPES = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
 const BLOCK_CLASSES = ['block0', 'block1', 'block2', 'block3', 'block4', 'block5', 'block6'];
 
-document.documentElement.style.setProperty('--area-x', COLS);
-document.documentElement.style.setProperty('--area-y', ROWS);
+function syncBoardScale(gameInstance) {
+  if (!(gameInstance instanceof TetrisGame)) {
+    console.error('[AGENT][syncBoardScale] Fast-Fail: instancia de juego invalida.');
+    return;
+  }
 
-function syncBoardScale(gameInstance = null) {
-  const wrapper = document.querySelector('.game-board-wrapper');
-  const board = document.querySelector('.game-board');
-  const gameSection = document.querySelector('.game-section');
+  const wrapper = gameInstance.$('.game-board-wrapper');
+  const board = gameInstance.$('.game-board');
+  const gameSection = gameInstance.$('.game-section');
 
   if (!wrapper || !board) return;
 
@@ -42,8 +43,8 @@ function syncBoardScale(gameInstance = null) {
   let dynamicUnit = Math.min(unitByWidth, unitByHeight);
   dynamicUnit = Math.max(12, dynamicUnit); // Mínimo razonable para legibilidad.
 
-  document.documentElement.style.setProperty('--unit', `${dynamicUnit}px`);
-  UNIT = dynamicUnit;
+  gameInstance.UNIT = dynamicUnit;
+  gameInstance.root.style.setProperty('--unit', `${dynamicUnit}px`);
 
   // Forzar tamaño exacto del tablero.
   board.style.width = `${COLS * dynamicUnit}px`;
@@ -52,16 +53,14 @@ function syncBoardScale(gameInstance = null) {
   board.style.maxHeight = 'none';
 
   // Asegurar que la grilla de fondo también coincida.
-  const gameGrid = document.getElementById('gameGrid');
+  const gameGrid = gameInstance.$('.game-grid');
   if (gameGrid) {
     gameGrid.style.width = `${COLS * dynamicUnit}px`;
     gameGrid.style.height = `${ROWS * dynamicUnit}px`;
   }
 
-  if (gameInstance) {
-    gameInstance.render();
-    gameInstance.renderNext();
-  }
+  gameInstance.render();
+  gameInstance.renderNext();
 }
 
 const TETROMINOS = {
@@ -202,12 +201,42 @@ class GeometricEvaluator {
 }
 
 class TetrisGame {
-  constructor() {
+  constructor(root, options = {}) {
+    if (!root) throw new Error('[AGENT] TetrisGame requiere un root element.');
+    this.root = root;
+    this.isCPU = options.isCPU ?? false;
+    this.playerName = options.playerName ?? 'P1';
+    this.onAttack = options.onAttack ?? null;
+    this.onDefeat = options.onDefeat ?? null;
+    this.UNIT = 20;
+    this.garbageQueue = 0;
+    this.root.style.setProperty('--area-x', COLS);
+    this.root.style.setProperty('--area-y', ROWS);
+    this.root.style.setProperty('--unit', `${this.UNIT}px`);
+
+    this.els = {
+      area: this.$('.tetris-area'),
+      nextBox: this.$('.tetris-nextpuzzle'),
+      indicator: this.$('.bot-strategy-indicator'),
+      timer: this.$('.tetris-stats-time'),
+      score: this.$('.tetris-stats-score'),
+      lines: this.$('.tetris-stats-lines'),
+      status: this.$('.mode-status'),
+      wallLogs: this.$('.wall-logs'),
+      playBtn: this.$('.playBtn'),
+      newGameBtn: this.$('.newGameBtn'),
+      iaAssistToggle: this.$('.iaAssistToggle'),
+      gameMessage: this.$('.gameMessage'),
+      gameOver: this.$('.tetris-gameover')
+    };
+    if (!this.els.area || !this.els.nextBox) {
+      throw new Error(`[AGENT][${this.playerName}] DOM de tablero incompleto.`);
+    }
     this.board = Array.from({length: ROWS}, () => Array(COLS).fill(-1));
-    this.area = document.getElementById('tetris-area');
-    this.nextBox = document.getElementById('tetris-nextpuzzle');
-    this.indicator = document.getElementById('bot-strategy-indicator');
-    this.timerDisplay = document.getElementById('tetris-stats-time');
+    this.area = this.els.area;
+    this.nextBox = this.els.nextBox;
+    this.indicator = this.els.indicator;
+    this.timerDisplay = this.els.timer;
     this.activeBlocksDOM = [];
     this.initActiveBlocks();
 
@@ -267,6 +296,10 @@ class TetrisGame {
 
     this.bindEvents();
     this.loop();
+  }
+
+  $(sel) {
+    return this.root.querySelector(sel);
   }
 
   initActiveBlocks() {
@@ -351,11 +384,16 @@ class TetrisGame {
   }
 
   bindEvents() {
-    document.getElementById('playBtn').onclick = () => this.togglePause();
-    document.getElementById('newGameBtn').onclick = () => this.reset();
-    document.getElementById('iaAssistToggle').onclick = () => {
+    if (this.isCPU) return;
+    if (!this.els.playBtn || !this.els.newGameBtn || !this.els.iaAssistToggle) {
+      console.error(`[AGENT][${this.playerName}] Fast-Fail: controles incompletos.`);
+      return;
+    }
+    this.els.playBtn.onclick = () => this.togglePause();
+    this.els.newGameBtn.onclick = () => this.reset();
+    this.els.iaAssistToggle.onclick = () => {
       this.iaAssist = !this.iaAssist;
-      document.getElementById('iaAssistToggle').classList.toggle('active', this.iaAssist);
+      this.els.iaAssistToggle.classList.toggle('active', this.iaAssist);
       
       // --- CORRECCIÓN DE LIMPIEZA ---
       this.pendingBotRequestId = null;
@@ -377,7 +415,7 @@ class TetrisGame {
       this.fallAccumulator = 0;
       this.dasTimer = 0;
       this.keys = { left: false, right: false, down: false };
-      const statusEl = document.getElementById('mode-status');
+      const statusEl = this.els.status;
       if (statusEl) {
         statusEl.textContent = this.iaAssist ? 'MODO: INICIANDO...' : 'MODO: MANUAL';
       }
@@ -506,8 +544,8 @@ class TetrisGame {
   createBlock(typeId, x, y, extraClass = '') {
     const div = document.createElement('div');
     div.className = BLOCK_CLASSES[typeId] + ' ' + extraClass;
-    div.style.left = `${x * UNIT}px`;
-    div.style.top = `${y * UNIT}px`;
+    div.style.left = `${x * this.UNIT}px`;
+    div.style.top = `${y * this.UNIT}px`;
     this.area.appendChild(div);
   }
 
@@ -531,8 +569,8 @@ class TetrisGame {
         if (val && blockIndex < 4) {
           const block = this.activeBlocksDOM[blockIndex];
           block.className = `active-block ${BLOCK_CLASSES[this.current.typeId]} bot-controlled`;
-          block.style.left = `${(this.current.x + dx) * UNIT}px`;
-          block.style.top = `${(this.current.y + dy) * UNIT}px`;
+          block.style.left = `${(this.current.x + dx) * this.UNIT}px`;
+          block.style.top = `${(this.current.y + dy) * this.UNIT}px`;
           block.style.display = 'block';
           blockIndex++;
         }
@@ -569,8 +607,8 @@ class TetrisGame {
         if (val) {
           const div = document.createElement('div');
           div.className = BLOCK_CLASSES[this.next.typeId];
-          div.style.left = `${(dx + offsetX) * UNIT}px`;
-          div.style.top = `${(dy + offsetY) * UNIT}px`;
+          div.style.left = `${(dx + offsetX) * this.UNIT}px`;
+          div.style.top = `${(dy + offsetY) * this.UNIT}px`;
           this.nextBox.appendChild(div);
         }
       });
@@ -620,7 +658,7 @@ class TetrisGame {
     this.botMode = mode || this.botMode;
 
     if (strategy) {
-      const statusEl = document.getElementById('mode-status');
+      const statusEl = this.els.status;
       if (statusEl) statusEl.textContent = `MODO: ${strategy}`;
     }
 
@@ -648,7 +686,7 @@ class TetrisGame {
 
     this.lastWallsIntactState = isIntact;
     this.lastWellColumn = wellCol;
-    const container = document.getElementById('wall-logs');
+    const container = this.els.wallLogs;
     if (!container) return;
 
     const placeholder = container.querySelector('.placeholder');
@@ -1193,8 +1231,8 @@ class TetrisGame {
     this.isAnimating = false;
     this.rowsToClear = null;
 
-    document.getElementById('tetris-stats-lines').textContent = this.lines;
-    document.getElementById('tetris-stats-score').textContent = this.score;
+    if (this.els.lines) this.els.lines.textContent = this.lines;
+    if (this.els.score) this.els.score.textContent = this.score;
 
     this.ghost = null;
     this.botPlan = null;
@@ -1216,7 +1254,7 @@ class TetrisGame {
     this.isGameOverAnimating = true;
     this.stopTimer();
     this.hideActiveBlocks();
-    const btn = document.getElementById('playBtn');
+    const btn = this.els.playBtn;
     if (btn) btn.textContent = '▶ Play';
 
     this.runGameOverDestruction();
@@ -1261,22 +1299,22 @@ class TetrisGame {
   togglePause() {
     if (this.isGameOverAnimating) return;
     this.paused = !this.paused;
-    const btn = document.getElementById('playBtn'); // Referencia al botón
+    const btn = this.els.playBtn;
 
     if (this.paused) {
-      document.getElementById('gameMessage')?.style.setProperty('display', 'block');
+      this.els.gameMessage?.style.setProperty('display', 'block');
       this.pauseTimer();
       if (btn) btn.textContent = '▶ Play'; // Cambio visual a Play
     } else if (!this.gameOver) {
-      document.getElementById('gameMessage')?.style.setProperty('display', 'none');
+      this.els.gameMessage?.style.setProperty('display', 'none');
       this.resumeTimer();
       if (btn) btn.textContent = '⏸ Pause'; // Cambio visual a Pause
     }
   }
 
   showGameOverScreen() {
-    document.getElementById('gameMessage')?.style.setProperty('display', 'block');
-    const el = document.getElementById('tetris-gameover');
+    this.els.gameMessage?.style.setProperty('display', 'block');
+    const el = this.els.gameOver;
     if (!el) return;
 
     el.innerHTML = `
@@ -1284,20 +1322,20 @@ class TetrisGame {
         <p>SCORE FINAL</p>
         <div class="final-score">${this.score}</div>
         <p>Lines: ${this.lines}</p>
-        <button class="btn-primary" id="retryBtn">TRY AGAIN</button>
+        <button class="btn-primary retryBtn">TRY AGAIN</button>
     `;
     
     // Activar botón de reintento
-    const retryBtn = el.querySelector('#retryBtn');
+    const retryBtn = el.querySelector('.retryBtn');
     retryBtn.onclick = () => this.reset();
 
     el.style.display = 'flex';
   }
 
   reset() {
-    const goScreen = document.getElementById('tetris-gameover');
+    const goScreen = this.els.gameOver;
     if (goScreen) goScreen.style.display = 'none';
-    document.getElementById('gameMessage')?.style.setProperty('display', 'block');
+    this.els.gameMessage?.style.setProperty('display', 'block');
     this.gameOver = false;
     this.isGameOverAnimating = false;
     this.board = Array.from({length: ROWS}, () => Array(COLS).fill(-1));
@@ -1308,7 +1346,7 @@ class TetrisGame {
     this.paused = true;
     this.isAnimating = false;
     this.rowsToClear = null;
-    const btn = document.getElementById('playBtn');
+    const btn = this.els.playBtn;
     if (btn) btn.textContent = '▶ Play';
     this.score = 0;
     this.lines = 0;
@@ -1326,8 +1364,8 @@ class TetrisGame {
     this.botMode = null;
     this.stopTimer();
     this.updateTimerDisplay();
-    document.getElementById('tetris-stats-score').textContent = this.score;
-    document.getElementById('tetris-stats-lines').textContent = this.lines;
+    if (this.els.score) this.els.score.textContent = this.score;
+    if (this.els.lines) this.els.lines.textContent = this.lines;
     this.render();
     this.renderNext();
     this.updateIndicator();
@@ -1404,15 +1442,24 @@ class TetrisGame {
 }
 
 window.addEventListener('load', () => {
-  syncBoardScale();
-  const game = new TetrisGame();
-  requestAnimationFrame(() => syncBoardScale(game));
+  const playerRoot = document.querySelector('.player-instance');
+  const cpuRoot = document.querySelector('.cpu-instance');
+  if (!playerRoot || !cpuRoot) {
+    console.error('[AGENT][bootstrap] Fast-Fail: faltan roots de jugador o CPU.');
+    return;
+  }
+
+  const games = [
+    new TetrisGame(playerRoot, { playerName: 'P1' }),
+    new TetrisGame(cpuRoot, { playerName: 'CPU', isCPU: true })
+  ];
+  requestAnimationFrame(() => games.forEach(syncBoardScale));
 
   window.addEventListener('resize', () => {
     clearTimeout(window.resizeTimer);
-    window.resizeTimer = setTimeout(() => syncBoardScale(game), 50);
+    window.resizeTimer = setTimeout(() => games.forEach(syncBoardScale), 50);
   });
 
-  window.addEventListener('orientationchange', () => syncBoardScale(game));
-  document.addEventListener('fullscreenchange', () => syncBoardScale(game));
+  window.addEventListener('orientationchange', () => games.forEach(syncBoardScale));
+  document.addEventListener('fullscreenchange', () => games.forEach(syncBoardScale));
 });
