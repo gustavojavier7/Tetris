@@ -596,7 +596,10 @@ class TetrisGame {
     const h = matrix.length;
     const COLS_BOX = 6;
     const ROWS_BOX = 5;
-    const boxUnit = this.nextBox.clientWidth / COLS_BOX;
+    const boxUnit = Math.min(
+      this.nextBox.clientWidth / COLS_BOX,
+      this.nextBox.clientHeight / ROWS_BOX
+    );
     const offsetX = (COLS_BOX - w) / 2;
     const offsetY = (ROWS_BOX - h) / 2;
     matrix.forEach((row, dy) => {
@@ -604,6 +607,7 @@ class TetrisGame {
         if (val) {
           const div = document.createElement('div');
           div.className = BLOCK_CLASSES[this.next.typeId];
+          div.style.setProperty('--unit', `${boxUnit}px`);
           div.style.left = `${(dx + offsetX) * boxUnit}px`;
           div.style.top = `${(dy + offsetY) * boxUnit}px`;
           this.nextBox.appendChild(div);
