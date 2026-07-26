@@ -1,187 +1,17 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tetris Moderno</title>
+    <title>Tetris Versus</title>
     <link href="tetris.css" rel="stylesheet" type="text/css">
     <link href="tetris.ico" rel="shortcut icon">
     <script type="text/javascript" src="tetris.js"></script>
 </head>
-
 <body>
     <div class="container">
-        <div class="versus-grid">
-        <section class="game-instance player-instance" data-player="P1">
         <div class="main-grid">
-            <div class="control-panel">
-                <section class="win98-window stats-window">
-                    <div class="win98-titlebar">
-                        <span class="title">📊 Estadísticas</span>
-                        <span class="win-btns"><button>_</button><button>▢</button><button>✕</button></span>
-                    </div>
-                    <div class="win98-client">
-                        <div class="stats-grid">
-                            <div class="stat-card highlight">
-                                <label>Score</label>
-                                <div class="value win98-inset tetris-stats-score">0</div>
-                            </div>
-                            <div class="stat-card">
-                                <label>Lines</label>
-                                <div class="value win98-inset tetris-stats-lines">0</div>
-                            </div>
-                            <div class="timer-box">
-                                <label>Time</label>
-                                <div class="value win98-inset tetris-stats-time">0:00</div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="win98-window control-window">
-                    <div class="win98-titlebar">
-                        <span class="title">🎮 Control IA</span>
-                        <span class="win-btns"><button>_</button><button>▢</button><button>✕</button></span>
-                    </div>
-                    <div class="win98-client control-stack">
-                        <div class="controls">
-                            <button class="btn-primary playBtn">▶ Play</button>
-                            <button class="btn-secondary newGameBtn">↻ New Game</button>
-                        </div>
-                        <div class="mode-switches">
-                            <div class="switch-group">
-                                <label>IA-ASSIST</label>
-                                <button type="button" class="switch iaAssistToggle"></button>
-                            </div>
-                        </div>
-                        <div class="bot-settings botSettings">
-                            <div class="bot-settings-header">🤖 IA MODE</div>
-                            <div class="bot-strategy balanced win98-inset bot-strategy-indicator">ANALIZANDO...</div>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="win98-window inline-next-piece">
-                    <div class="win98-titlebar">
-                        <span class="title">🧩 Próxima Pieza</span>
-                        <span class="win-btns"><button>_</button><button>▢</button><button>✕</button></span>
-                    </div>
-                    <div class="win98-client">
-                        <div class="next-piece-box win98-inset tetris-nextpuzzle"></div>
-                    </div>
-                </section>
-
-                <section class="win98-window log-panel">
-                    <div class="win98-titlebar">
-                        <span class="title">🧱 Wall Integrity</span>
-                        <span class="win-btns"><button>_</button><button>▢</button><button>✕</button></span>
-                    </div>
-                    <div class="win98-client">
-                        <div class="log-content win98-inset wall-logs">
-                            <div class="log-entry placeholder">Esperando datos...</div>
-                        </div>
-                    </div>
-                </section>
-            </div>
-
-            <div class="game-section">
-                <section class="win98-window tetris-window">
-                    <div class="win98-titlebar">
-                        <span class="title">🕹️ Tetris.exe v2.1 — P1</span>
-                        <span class="win-btns"><button>_</button><button>▢</button><button>✕</button></span>
-                    </div>
-                    <div class="win98-client">
-                        <div class="game-board-wrapper">
-                            <div class="game-board win98-inset">
-                                <div class="game-grid gameGrid"></div>
-                                <div class="tetris-area"></div>
-                                <div class="game-message idle gameMessage">
-                                    <h2>PRESS START</h2>
-                                    <p>Ready to play?</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="win98-statusbar mode-status">MODO: MANUAL</div>
-                </section>
-            </div>
-        </div>
-        <div class="tetris-gameover" style="display:none;"></div>
-        </section>
-        <section class="game-instance cpu-instance" data-player="CPU">
-        <div class="main-grid">
-            <div class="control-panel">
-                <section class="win98-window stats-window">
-                    <div class="win98-titlebar">
-                        <span class="title">📊 Estadísticas</span>
-                        <span class="win-btns"><button>_</button><button>▢</button><button>✕</button></span>
-                    </div>
-                    <div class="win98-client">
-                        <div class="stats-grid">
-                            <div class="stat-card highlight">
-                                <label>Score</label>
-                                <div class="value win98-inset tetris-stats-score">0</div>
-                            </div>
-                            <div class="stat-card">
-                                <label>Lines</label>
-                                <div class="value win98-inset tetris-stats-lines">0</div>
-                            </div>
-                            <div class="timer-box">
-                                <label>Time</label>
-                                <div class="value win98-inset tetris-stats-time">0:00</div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="win98-window control-window">
-                    <div class="win98-titlebar">
-                        <span class="title">🎮 Control IA</span>
-                        <span class="win-btns"><button>_</button><button>▢</button><button>✕</button></span>
-                    </div>
-                    <div class="win98-client control-stack">
-                        <div class="controls">
-                            <button class="btn-primary playBtn">▶ Play</button>
-                            <button class="btn-secondary newGameBtn">↻ New Game</button>
-                        </div>
-                        <div class="mode-switches">
-                            <div class="switch-group">
-                                <label>IA-ASSIST</label>
-                                <button type="button" class="switch iaAssistToggle"></button>
-                            </div>
-                        </div>
-                        <div class="bot-settings botSettings">
-                            <div class="bot-settings-header">🤖 IA MODE</div>
-                            <div class="bot-strategy balanced win98-inset bot-strategy-indicator">ANALIZANDO...</div>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="win98-window inline-next-piece">
-                    <div class="win98-titlebar">
-                        <span class="title">🧩 Próxima Pieza</span>
-                        <span class="win-btns"><button>_</button><button>▢</button><button>✕</button></span>
-                    </div>
-                    <div class="win98-client">
-                        <div class="next-piece-box win98-inset tetris-nextpuzzle"></div>
-                    </div>
-                </section>
-
-                <section class="win98-window log-panel">
-                    <div class="win98-titlebar">
-                        <span class="title">🧱 Wall Integrity</span>
-                        <span class="win-btns"><button>_</button><button>▢</button><button>✕</button></span>
-                    </div>
-                    <div class="win98-client">
-                        <div class="log-content win98-inset wall-logs">
-                            <div class="log-entry placeholder">Esperando datos...</div>
-                        </div>
-                    </div>
-                </section>
-            </div>
-
-            <div class="game-section">
+            <div class="game-section cpu-side" data-player="CPU">
                 <section class="win98-window tetris-window">
                     <div class="win98-titlebar">
                         <span class="title">🕹️ Tetris.exe v2.1 — CPU</span>
@@ -190,7 +20,118 @@
                     <div class="win98-client">
                         <div class="game-board-wrapper">
                             <div class="game-board win98-inset">
-                                <div class="game-grid gameGrid"></div>
+                                <div class="game-grid"></div>
+                                <div class="tetris-area"></div>
+                                <div class="game-message idle gameMessage">
+                                    <h2>CPU READY</h2>
+                                    <p>Press Play</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="win98-statusbar mode-status">MODO: CPU</div>
+                </section>
+                <div class="tetris-gameover" style="display:none;"></div>
+            </div>
+
+            <div class="control-panel shared-panel">
+                <section class="instance-ui cpu-ui" data-player="CPU">
+                    <div class="win98-window stats-window">
+                        <div class="win98-titlebar"><span class="title">📊 CPU</span></div>
+                        <div class="win98-client">
+                            <div class="stats-grid">
+                                <div class="stat-card highlight">
+                                    <label>Score</label>
+                                    <div class="value win98-inset tetris-stats-score">0</div>
+                                </div>
+                                <div class="stat-card">
+                                    <label>Lines</label>
+                                    <div class="value win98-inset tetris-stats-lines">0</div>
+                                </div>
+                                <div class="timer-box">
+                                    <label>Time</label>
+                                    <div class="value win98-inset tetris-stats-time">0:00</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="win98-window compact-info">
+                        <div class="win98-titlebar"><span class="title">🤖 CPU IA</span></div>
+                        <div class="win98-client">
+                            <div class="bot-strategy balanced win98-inset bot-strategy-indicator">ANALIZANDO...</div>
+                            <div class="next-piece-box win98-inset tetris-nextpuzzle"></div>
+                            <div class="log-content win98-inset wall-logs">
+                                <div class="log-entry placeholder">Esperando datos...</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="win98-window control-window shared-controls">
+                    <div class="win98-titlebar">
+                        <span class="title">🎮 CONTROL VERSUS</span>
+                        <span class="win-btns"><button>_</button><button>▢</button><button>✕</button></span>
+                    </div>
+                    <div class="win98-client control-stack">
+                        <div class="controls">
+                            <button class="btn-primary playBtn">▶ Play</button>
+                            <button class="btn-secondary newGameBtn">↻ New Game</button>
+                        </div>
+                        <div class="mode-switches">
+                            <div class="switch-group">
+                                <label>IA-ASSIST P1</label>
+                                <button type="button" class="switch iaAssistToggle"></button>
+                            </div>
+                        </div>
+                        <div class="bot-settings">
+                            <div class="bot-settings-header">🤖 P1 IA MODE</div>
+                            <div class="bot-strategy balanced win98-inset bot-strategy-indicator">LISTO</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="instance-ui human-ui" data-player="P1">
+                    <div class="win98-window stats-window">
+                        <div class="win98-titlebar"><span class="title">📊 JUGADOR</span></div>
+                        <div class="win98-client">
+                            <div class="stats-grid">
+                                <div class="stat-card highlight">
+                                    <label>Score</label>
+                                    <div class="value win98-inset tetris-stats-score">0</div>
+                                </div>
+                                <div class="stat-card">
+                                    <label>Lines</label>
+                                    <div class="value win98-inset tetris-stats-lines">0</div>
+                                </div>
+                                <div class="timer-box">
+                                    <label>Time</label>
+                                    <div class="value win98-inset tetris-stats-time">0:00</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="win98-window compact-info">
+                        <div class="win98-titlebar"><span class="title">🧩 JUGADOR</span></div>
+                        <div class="win98-client">
+                            <div class="next-piece-box win98-inset tetris-nextpuzzle"></div>
+                            <div class="log-content win98-inset wall-logs">
+                                <div class="log-entry placeholder">Esperando datos...</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <div class="game-section human-side" data-player="P1">
+                <section class="win98-window tetris-window">
+                    <div class="win98-titlebar">
+                        <span class="title">🕹️ Tetris.exe v2.1 — P1</span>
+                        <span class="win-btns"><button>_</button><button>▢</button><button>✕</button></span>
+                    </div>
+                    <div class="win98-client">
+                        <div class="game-board-wrapper">
+                            <div class="game-board win98-inset">
+                                <div class="game-grid"></div>
                                 <div class="tetris-area"></div>
                                 <div class="game-message idle gameMessage">
                                     <h2>PRESS START</h2>
@@ -201,12 +142,9 @@
                     </div>
                     <div class="win98-statusbar mode-status">MODO: MANUAL</div>
                 </section>
+                <div class="tetris-gameover" style="display:none;"></div>
             </div>
-        </div>
-        <div class="tetris-gameover" style="display:none;"></div>
-        </section>
         </div>
     </div>
 </body>
-
 </html>

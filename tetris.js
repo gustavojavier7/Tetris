@@ -6,15 +6,21 @@ const ROWS = 22;
 const PIECE_TYPES = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
 const BLOCK_CLASSES = ['block0', 'block1', 'block2', 'block3', 'block4', 'block5', 'block6'];
 
-function syncBoardScale(gameInstance) {
+function syncBoardScale(gameInstance, scaleFactor = 1) {
   if (!(gameInstance instanceof TetrisGame)) {
     console.error('[AGENT][syncBoardScale] Fast-Fail: instancia de juego invalida.');
+    return;
+  }
+  if (!Number.isFinite(scaleFactor) || scaleFactor <= 0) {
+    console.error('[AGENT][syncBoardScale] Fast-Fail: factor de escala invalido.');
     return;
   }
 
   const wrapper = gameInstance.$('.game-board-wrapper');
   const board = gameInstance.$('.game-board');
-  const gameSection = gameInstance.$('.game-section');
+  const gameSection = gameInstance.root.matches('.game-section')
+    ? gameInstance.root
+    : gameInstance.$('.game-section');
 
   if (!wrapper || !board) return;
 
@@ -40,8 +46,8 @@ function syncBoardScale(gameInstance) {
   const unitByWidth = Math.floor(availableWidth / COLS);
   const unitByHeight = Math.floor(availableHeight / ROWS);
 
-  let dynamicUnit = Math.min(unitByWidth, unitByHeight);
-  dynamicUnit = Math.max(12, dynamicUnit); // Mínimo razonable para legibilidad.
+  let dynamicUnit = Math.floor(Math.min(unitByWidth, unitByHeight) * scaleFactor);
+  dynamicUnit = Math.max(scaleFactor < 1 ? 8 : 12, dynamicUnit);
 
   gameInstance.UNIT = dynamicUnit;
   gameInstance.root.style.setProperty('--unit', `${dynamicUnit}px`);
@@ -204,6 +210,8 @@ class TetrisGame {
   constructor(root, options = {}) {
     if (!root) throw new Error('[AGENT] TetrisGame requiere un root element.');
     this.root = root;
+    this.uiRoot = options.uiRoot ?? null;
+    this.controlsRoot = options.controlsRoot ?? null;
     this.isCPU = options.isCPU ?? false;
     this.playerName = options.playerName ?? 'P1';
     this.onAttack = options.onAttack ?? null;
@@ -299,7 +307,10 @@ class TetrisGame {
   }
 
   $(sel) {
-    return this.root.querySelector(sel);
+    return this.root.querySelector(sel)
+      || this.uiRoot?.querySelector(sel)
+      || this.controlsRoot?.querySelector(sel)
+      || null;
   }
 
   initActiveBlocks() {
@@ -422,21 +433,14 @@ class TetrisGame {
       this.updateIndicator();
     };
 
-    document.addEventListener('keydown', (event) => this.handleKeyDown(event));
-    document.addEventListener('keyup', (event) => this.handleKeyUp(event));
   }
 
   handleKeyDown(event) {
-    if (['ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp', ' ', 'p', 'P'].includes(event.key)) {
+    if (['ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp', ' '].includes(event.key)) {
       event.preventDefault();
     }
 
-    if (event.key.toUpperCase() === 'P') {
-      this.togglePause();
-      return;
-    }
-
-    if (this.paused || this.gameOver || this.iaAssist || this.isAnimating || this.isGameOverAnimating) return;
+    if (this.paused || this.gameOver || this.isAnimating || this.isGameOverAnimating) return;
     const pieceReady = this.current && this.areTimer === 0;
 
     switch (event.key) {
@@ -1297,8 +1301,12 @@ class TetrisGame {
   }
 
   togglePause() {
+    this.setPaused(!this.paused);
+  }
+
+  setPaused(paused) {
     if (this.isGameOverAnimating) return;
-    this.paused = !this.paused;
+    this.paused = Boolean(paused);
     const btn = this.els.playBtn;
 
     if (this.paused) {
@@ -1441,25 +1449,90 @@ class TetrisGame {
   
 }
 
+class VersusController {
+  constructor(human, cpu) {
+    if (!(human instanceof TetrisGame) || !(cpu instanceof TetrisGame)) {
+      throw new Error('[AGENT][versus] Se requieren instancias humana y CPU validas.');
+    }
+    this.human = human;
+    this.cpu = cpu;
+    this.enableCPU();
+
+    if (this.human.els.playBtn) {
+      this.human.els.playBtn.onclick = () => this.togglePause();
+    }
+    if (this.human.els.newGameBtn) {
+      this.human.els.newGameBtn.onclick = () => this.reset();
+    }
+  }
+
+  enableCPU() {
+    this.cpu.iaAssist = true;
+    this.cpu.els.gameMessage?.style.setProperty('display', this.cpu.paused ? 'block' : 'none');
+    if (this.cpu.els.status) this.cpu.els.status.textContent = 'MODO: CPU';
+    this.cpu.updateIndicator();
+    if (this.cpu.current && !this.cpu.gameOver && !this.cpu.isAnimating) {
+      this.cpu.requestBotMove();
+    }
+  }
+
+  togglePause() {
+    const shouldPause = !this.human.paused || !this.cpu.paused;
+    this.human.setPaused(shouldPause);
+    this.cpu.setPaused(shouldPause);
+  }
+
+  reset() {
+    this.human.reset();
+    this.cpu.reset();
+    this.enableCPU();
+  }
+}
+
 window.addEventListener('load', () => {
-  const playerRoot = document.querySelector('.player-instance');
-  const cpuRoot = document.querySelector('.cpu-instance');
-  if (!playerRoot || !cpuRoot) {
-    console.error('[AGENT][bootstrap] Fast-Fail: faltan roots de jugador o CPU.');
+  const humanRoot = document.querySelector('.human-side');
+  const cpuRoot = document.querySelector('.cpu-side');
+  const humanUI = document.querySelector('.human-ui');
+  const cpuUI = document.querySelector('.cpu-ui');
+  const sharedControls = document.querySelector('.shared-controls');
+  if (!humanRoot || !cpuRoot || !humanUI || !cpuUI || !sharedControls) {
+    console.error('[AGENT][bootstrap] Fast-Fail: layout versus incompleto.');
     return;
   }
 
-  const games = [
-    new TetrisGame(playerRoot, { playerName: 'P1' }),
-    new TetrisGame(cpuRoot, { playerName: 'CPU', isCPU: true })
-  ];
-  requestAnimationFrame(() => games.forEach(syncBoardScale));
+  const human = new TetrisGame(humanRoot, {
+    playerName: 'P1',
+    uiRoot: humanUI,
+    controlsRoot: sharedControls
+  });
+  const cpu = new TetrisGame(cpuRoot, {
+    playerName: 'CPU',
+    isCPU: true,
+    uiRoot: cpuUI
+  });
+  const versus = new VersusController(human, cpu);
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key.toUpperCase() === 'P') {
+      event.preventDefault();
+      versus.togglePause();
+      return;
+    }
+    versus.human.handleKeyDown(event);
+  });
+  document.addEventListener('keyup', (event) => versus.human.handleKeyUp(event));
+
+  const syncVersusBoards = () => {
+    syncBoardScale(versus.cpu, 0.7);
+    syncBoardScale(versus.human);
+  };
+  requestAnimationFrame(syncVersusBoards);
 
   window.addEventListener('resize', () => {
     clearTimeout(window.resizeTimer);
-    window.resizeTimer = setTimeout(() => games.forEach(syncBoardScale), 50);
+    window.resizeTimer = setTimeout(syncVersusBoards, 50);
   });
 
-  window.addEventListener('orientationchange', () => games.forEach(syncBoardScale));
-  document.addEventListener('fullscreenchange', () => games.forEach(syncBoardScale));
+  window.addEventListener('orientationchange', syncVersusBoards);
+  document.addEventListener('fullscreenchange', syncVersusBoards);
 });
