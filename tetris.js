@@ -6,15 +6,21 @@ const ROWS = 22;
 const PIECE_TYPES = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
 const BLOCK_CLASSES = ['block0', 'block1', 'block2', 'block3', 'block4', 'block5', 'block6'];
 
-function syncBoardScale(gameInstance) {
+function syncBoardScale(gameInstance, scaleFactor = 1) {
   if (!(gameInstance instanceof TetrisGame)) {
     console.error('[AGENT][syncBoardScale] Fast-Fail: instancia de juego invalida.');
+    return;
+  }
+  if (!Number.isFinite(scaleFactor) || scaleFactor <= 0) {
+    console.error('[AGENT][syncBoardScale] Fast-Fail: factor de escala invalido.');
     return;
   }
 
   const wrapper = gameInstance.$('.game-board-wrapper');
   const board = gameInstance.$('.game-board');
-  const gameSection = gameInstance.$('.game-section');
+  const gameSection = gameInstance.root.matches('.game-section')
+    ? gameInstance.root
+    : gameInstance.$('.game-section');
 
   if (!wrapper || !board) return;
 
@@ -40,8 +46,8 @@ function syncBoardScale(gameInstance) {
   const unitByWidth = Math.floor(availableWidth / COLS);
   const unitByHeight = Math.floor(availableHeight / ROWS);
 
-  let dynamicUnit = Math.min(unitByWidth, unitByHeight);
-  dynamicUnit = Math.max(12, dynamicUnit); // MÃ­nimo razonable para legibilidad.
+  let dynamicUnit = Math.floor(Math.min(unitByWidth, unitByHeight) * scaleFactor);
+  dynamicUnit = Math.max(scaleFactor < 1 ? 8 : 12, dynamicUnit);
 
   gameInstance.UNIT = dynamicUnit;
   gameInstance.root.style.setProperty('--unit', `${dynamicUnit}px`);
@@ -204,6 +210,8 @@ class TetrisGame {
   constructor(root, options = {}) {
     if (!root) throw new Error('[AGENT] TetrisGame requiere un root element.');
     this.root = root;
+    this.uiRoot = options.uiRoot ?? null;
+    this.controlsRoot = options.controlsRoot ?? null;
     this.isCPU = options.isCPU ?? false;
     this.playerName = options.playerName ?? 'P1';
     this.onAttack = options.onAttack ?? null;
@@ -299,7 +307,10 @@ class TetrisGame {
   }
 
   $(sel) {
-    return this.root.querySelector(sel);
+    return this.root.querySelector(sel)
+      || this.uiRoot?.querySelector(sel)
+      || this.controlsRoot?.querySelector(sel)
+      || null;
   }
 
   initActiveBlocks() {
@@ -422,21 +433,14 @@ class TetrisGame {
       this.updateIndicator();
     };
 
-    document.addEventListener('keydown', (event) => this.handleKeyDown(event));
-    document.addEventListener('keyup', (event) => this.handleKeyUp(event));
   }
 
   handleKeyDown(event) {
-    if (['ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp', ' ', 'p', 'P'].includes(event.key)) {
+    if (['ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp', ' '].includes(event.key)) {
       event.preventDefault();
     }
 
-    if (event.key.toUpperCase() === 'P') {
-      this.togglePause();
-      return;
-    }
-
-    if (this.paused || this.gameOver || this.iaAssist || this.isAnimating || this.isGameOverAnimating) return;
+    if (this.paused || this.gameOver || this.isAnimating || this.isGameOverAnimating) return;
     const pieceReady = this.current && this.areTimer === 0;
 
     switch (event.key) {
@@ -457,1009 +461,4 @@ class TetrisGame {
         }
         break;
       case 'ArrowDown':
-        this.keys.down = true;
-        break;
-      case 'ArrowUp':
-        if (pieceReady) this.rotate();
-        break;
-      case ' ':
-        if (pieceReady) this.hardDrop();
-        break;
-      case 'c':
-      case 'C':
-        this.holdPiece();
-        break;
-    }
-  }
-
-  handleKeyUp(event) {
-    switch (event.key) {
-      case 'ArrowLeft':
-        this.keys.left = false;
-        this.dasTimer = 0;
-        break;
-      case 'ArrowRight':
-        this.keys.right = false;
-        this.dasTimer = 0;
-        break;
-      case 'ArrowDown':
-        this.keys.down = false;
-        break;
-    }
-  }
-
-  updateIndicator() {
-    if (!this.indicator) return;
-    this.indicator.classList.remove('bot-thinking', 'bot-idle', 'balanced');
-    this.indicator.classList.add('bot-strategy');
-
-    if (this.iaAssist) {
-      this.indicator.classList.add('balanced');
-      this.indicator.classList.add(this.isBotThinking ? 'bot-thinking' : 'bot-idle');
-      this.indicator.textContent = this.isBotThinking ? 'CALCULANDO...' : (this.botMode || 'LISTO');
-    } else {
-      this.indicator.classList.add('bot-idle');
-      this.indicator.textContent = 'MANUAL';
-    }
-  }
-
-  render() {
-    // 1. Limpieza NO Destructiva (Fix CrÃ­tico)
-    // En lugar de borrar todo (innerHTML = ''), buscamos y eliminamos
-    // solo los bloques que NO son parte de la pieza activa persistente.
-    // Esto mantiene vivos los nodos .active-block para actualizaciones inmediatas.
-    const junkBlocks = this.area.querySelectorAll('div:not(.active-block)');
-    junkBlocks.forEach(el => el.remove());
-
-    // 2. Renderizar piezas fijas (Board)
-    // Estas se dibujan de nuevo en cada frame (se podrÃ­a optimizar, pero estÃ¡ bien asÃ­)
-    for (let y = 0; y < ROWS; y++) {
-      for (let x = 0; x < COLS; x++) {
-        if (this.board[y][x] === -2) {
-          this.createBlock(0, x, y, 'destruct-anim');
-        } else if (this.board[y][x] >= 0) {
-          const isExploding = this.isAnimating && this.rowsToClear && this.rowsToClear.includes(y);
-          const extraClass = isExploding ? 'destruct-anim' : '';
-          this.createBlock(this.board[y][x], x, y, extraClass);
-        }
-      }
-    }
-
-    // 3. Renderizar Ghost (si IA activa)
-    // El ghost no necesita animaciÃ³n, asÃ­ que usamos el mÃ©todo estÃ¡ndar
-    if (this.ghost && this.iaAssist && !this.isAnimating && !this.isGameOverAnimating) {
-      this.renderPieceGhost(this.ghost);
-    }
-
-    // 4. Actualizar visuales de la pieza activa
-    // AquÃ­ es donde ocurre la magia: solo cambiamos las coordenadas (top/left)
-    // y los bloques se tele-transportan sin interpolaciÃ³n para reflejar el NES.
-    if (this.current && !this.isAnimating && !this.isGameOverAnimating) {
-      this.updateActivePieceVisuals();
-    } else {
-      this.hideActiveBlocks();
-    }
-  }
-
-  createBlock(typeId, x, y, extraClass = '') {
-    const div = document.createElement('div');
-    div.className = BLOCK_CLASSES[typeId] + ' ' + extraClass;
-    div.style.left = `${x * this.UNIT}px`;
-    div.style.top = `${y * this.UNIT}px`;
-    this.area.appendChild(div);
-  }
-
-  renderPieceGhost(piece) {
-    const extra = 'bot-ghost';
-    piece.matrix.forEach((row, dy) => {
-      row.forEach((val, dx) => {
-        if (val) {
-          this.createBlock(piece.typeId, piece.x + dx, piece.y + dy, extra);
-        }
-      });
-    });
-  }
-
-  updateActivePieceVisuals() {
-    let blockIndex = 0;
-    const matrix = this.current.matrix;
-
-    matrix.forEach((row, dy) => {
-      row.forEach((val, dx) => {
-        if (val && blockIndex < 4) {
-          const block = this.activeBlocksDOM[blockIndex];
-          block.className = `active-block ${BLOCK_CLASSES[this.current.typeId]} bot-controlled`;
-          block.style.left = `${(this.current.x + dx) * this.UNIT}px`;
-          block.style.top = `${(this.current.y + dy) * this.UNIT}px`;
-          block.style.display = 'block';
-          blockIndex++;
-        }
-      });
-    });
-
-    for (let i = blockIndex; i < this.activeBlocksDOM.length; i++) {
-      this.activeBlocksDOM[i].style.display = 'none';
-    }
-  }
-
-  hideActiveBlocks() {
-    this.activeBlocksDOM.forEach(block => {
-      block.style.display = 'none';
-    });
-  }
-
-  renderNext() {
-    if (!this.nextBox) {
-      console.warn('[AGENT][renderNext] Fast-Fail: contenedor #tetris-nextpuzzle no disponible.');
-      return;
-    }
-    this.nextBox.innerHTML = '';
-    if (!this.next) return;
-    const matrix = this.next.shapes[0];
-    const w = matrix[0].length;
-    const h = matrix.length;
-    const COLS_BOX = 6;
-    const ROWS_BOX = 5;
-    const offsetX = (COLS_BOX - w) / 2;
-    const offsetY = (ROWS_BOX - h) / 2;
-    matrix.forEach((row, dy) => {
-      row.forEach((val, dx) => {
-        if (val) {
-          const div = document.createElement('div');
-          div.className = BLOCK_CLASSES[this.next.typeId];
-          div.style.left = `${(dx + offsetX) * this.UNIT}px`;
-          div.style.top = `${(dy + offsetY) * this.UNIT}px`;
-          this.nextBox.appendChild(div);
-        }
-      });
-    });
-  }
-
-  requestBotMove() {
-    if (!this.iaAssist || !this.current || this.isBotThinking || !this.botWorker) return;
-
-    this.isBotThinking = true;
-    this.botRequestId += 1;
-    this.pendingBotRequestId = this.botRequestId;
-    this.updateIndicator();
-
-    try {
-      const bagSequence = [this.current.typeId];
-      if (this.next && this.next.typeId !== undefined && this.next.typeId !== null) {
-        bagSequence.push(this.next.typeId);
-      }
-      if (Array.isArray(this.bag) && this.bag.length > 0) {
-        bagSequence.push(...[...this.bag].reverse());
-      }
-
-      this.botWorker.postMessage({
-        type: 'THINK',
-        board: this.board.map(row => [...row]),
-        currentTypeId: this.current.typeId,
-        nextTypeId: this.next ? this.next.typeId : null,
-        bagTypeIds: bagSequence,
-        requestId: this.pendingBotRequestId
-      });
-    } catch (err) {
-      console.warn('[AGENT][requestBotMove] Fast-Fail: no se pudo enviar trabajo al worker.', err);
-      this.isBotThinking = false;
-      this.pendingBotRequestId = null;
-      this.updateIndicator();
-    }
-  }
-
-  handleWorkerMessage(e) {
-    const { type, ghost, requestId, mode, strategy, wallsIntact, wellColumn } = e.data || {};
-    if (type !== 'DECISION') return;
-    if (this.pendingBotRequestId !== null && requestId !== this.pendingBotRequestId) return;
-
-    this.pendingBotRequestId = null;
-    this.isBotThinking = false;
-    this.botMode = mode || this.botMode;
-
-    if (strategy) {
-      const statusEl = this.els.status;
-      if (statusEl) statusEl.textContent = `MODO: ${strategy}`;
-    }
-
-    if (typeof wallsIntact === 'boolean') {
-      this.updateWallLogs(wallsIntact, wellColumn);
-    }
-
-    if (this.iaAssist) {
-      this.ghost = ghost;
-      if (!this.botActionQueue.length) {
-        this.prepareBotPlanFromGhost();
-      }
-    } else {
-      this.ghost = null;
-      this.botPlan = null;
-      this.botActionQueue = [];
-    }
-
-    this.updateIndicator();
-    this.render();
-  }
-
-  updateWallLogs(isIntact, wellCol) {
-    if (this.lastWallsIntactState === isIntact && this.lastWellColumn === wellCol) return;
-
-    this.lastWallsIntactState = isIntact;
-    this.lastWellColumn = wellCol;
-    const container = this.els.wallLogs;
-    if (!container) return;
-
-    const placeholder = container.querySelector('.placeholder');
-    if (placeholder) placeholder.remove();
-
-    const time = new Date().toLocaleTimeString('es-ES', { hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit' });
-
-    if (wellCol !== null && wellCol !== undefined) {
-      const divCol = document.createElement('div');
-      divCol.className = 'log-entry';
-      divCol.style.color = '#00ffff';
-      divCol.style.borderColor = '#00aaaa';
-      divCol.textContent = `[${time}] Columna candidata: ${wellCol}`;
-      container.prepend(divCol);
-    }
-
-    const div = document.createElement('div');
-    const text = isIntact ? "Estructura sÃ³lida" : "Estructura no sÃ³lida";
-    const cssClass = isIntact ? "solid" : "broken";
-
-    div.className = `log-entry ${cssClass}`;
-    div.textContent = `[${time}] ${text}`;
-
-    container.prepend(div);
-
-    while (container.children.length > 8) {
-      container.lastElementChild.remove();
-    }
-  }
-
-  botThink() {
-    if (!this.current) return;
-    this.ghost = null;
-
-    const pre = GeometricEvaluator.countAgujerosCanonicos(this.board);
-    const huecos = GeometricEvaluator.findHuecos(this.board);
-    // Altura mÃ¡xima actual del tablero (perfil global)
-    let maxHeight = 0;
-    for (let cx = 0; cx < COLS; cx++) {
-      for (let cy = 0; cy < ROWS; cy++) {
-        if (this.board[cy][cx] !== -1) {
-          maxHeight = Math.max(maxHeight, ROWS - cy);
-          break;
-        }
-      }
-    }
-    let lowestHueco = null;
-    for (const h of huecos) {
-      const yEnd = h.top + h.h - 1;
-      if (!lowestHueco ||
-          yEnd > (lowestHueco.top + lowestHueco.h - 1) ||
-          (yEnd === (lowestHueco.top + lowestHueco.h - 1) && h.left < lowestHueco.left)) {
-        lowestHueco = h;
-      }
-    }
-    const huecoMask = GeometricEvaluator.buildHuecoMask(huecos);
-
-    const better = (a, b) => {
-      // 0. ValidaciÃ³n de Integridad (Fail-Fast)
-      if (!a) return false;
-      if (!b) return true;
-
-      // 1. SUPERVIVENCIA & LIMPIEZA (Prioridad Absoluta)
-      // Si limpiamos lÃ­neas, es objetivamente mejor porque reduce entropÃ­a.
-      if (a.lines !== b.lines) return a.lines > b.lines;
-
-      // 2. INTEGRIDAD ESTRUCTURAL (Seguridad)
-      // Rechazo total a movimientos que creen nuevos agujeros (deudas).
-      // Esta regla ahora domina sobre la profundidad.
-      if (a.deltaHoles !== b.deltaHoles) return a.deltaHoles < b.deltaHoles;
-
-      // 3. ESTABILIDAD DEL ENCASTRE (FricciÃ³n)
-      // Buscamos el movimiento que toque mÃ¡s superficies (mayor CL).
-      if (a.cl !== b.cl) return a.cl > b.cl;
-
-      // 4. ESTRATEGIA DE PROFUNDIDAD (Desempate)
-      // Solo si la seguridad estructural es idÃ©ntica, miramos la profundidad.
-      
-      // 4a. Afinidad al Objetivo (Si existe un hueco profundo detectado)
-      if (lowestHueco && a.lines === 0 && b.lines === 0) {
-        // AquÃ­ SÃ priorizamos bajar, pero solo porque ya pasamos el filtro de seguridad #2
-        if (a.y !== b.y) return a.y > b.y; 
-      }
-
-      // 4b. Relleno y Gravedad General
-      if (a.huecoFill !== b.huecoFill) return a.huecoFill > b.huecoFill;
-      if (a.y !== b.y) return a.y > b.y; 
-      if (a.depthSum !== b.depthSum) return a.depthSum < b.depthSum;
-
-      return false;
-    };
-
-    let bestCandidate = null;
-
-    // Iteramos por las rotaciones predefinidas en TETROMINOS
-    this.current.shapes.forEach((shapeMatrix, rotationIdx) => {
-      const width = shapeMatrix[0].length;
-
-      // Barrido lateral
-      for (let x = -1; x <= COLS - width + 1; x++) {
-        // 1. Simular gravedad (Drop Y)
-        let y = this.current.y;
-        while (!this.collides(shapeMatrix, x, y + 1)) {
-          y++;
-        }
-
-        // Si la pieza choca al nacer, posiciÃ³n invÃ¡lida
-        if (this.collides(shapeMatrix, x, y)) continue;
-
-        // 2. Simular Estado Final con limpieza de lÃ­neas
-        const simulation = this.getSimulatedBoardWithLines(shapeMatrix, x, y);
-        if (!simulation) {
-          console.warn('[AGENT][botThink] Fast-Fail: simulaciÃ³n invÃ¡lida, candidato descartado.');
-          continue;
-        }
-        const {board: simulatedBoard, linesCleared} = simulation;
-        // Filtro de crecimiento relativo (NO suicida)
-        if (linesCleared === 0) {
-          const placementHeight = ROWS - y;
-          if (placementHeight > maxHeight + 4) continue;
-        }
-
-        // 3. EvaluaciÃ³n GeomÃ©trica
-        const cl = GeometricEvaluator.calculateCL(shapeMatrix, x, y, this.board);
-        const post = GeometricEvaluator.countAgujerosCanonicos(simulatedBoard);
-        const deltaHoles = post.holes - pre.holes;
-        const holesReduced = Math.max(0, pre.holes - post.holes);
-        const huecoFill = GeometricEvaluator.countPlacedInHuecos(shapeMatrix, x, y, huecoMask);
-
-        const candidate = {
-          lines: linesCleared,
-          deltaHoles,
-          holesReduced,
-          huecoFill,
-          cl,
-          y,
-          depthSum: post.depthSum,
-          matrix: shapeMatrix,
-          rotation: rotationIdx,
-          x
-        };
-
-        if (better(candidate, bestCandidate)) {
-          bestCandidate = candidate;
-        }
-      }
-    });
-
-    if (bestCandidate) {
-      this.ghost = {
-        typeId: this.current.typeId,
-        matrix: bestCandidate.matrix,
-        rotation: bestCandidate.rotation,
-        x: bestCandidate.x,
-        y: bestCandidate.y
-      };
-    }
-
-    this.render();
-  }
-
-  prepareBotPlanFromGhost() {
-    this.botPlan = null;
-    this.botActionQueue = [];
-    this.botActionTimer = 0;
-
-    if (!this.iaAssist || !this.current || !this.ghost) {
-      return;
-    }
-
-    if (this.current.typeId !== this.ghost.typeId) {
-      console.warn('[AGENT][botPlan] Fast-Fail: el ghost no coincide con la pieza activa.');
-      return;
-    }
-
-    const rotationsNeeded = (this.ghost.rotation - this.current.rotation + this.current.shapes.length) % this.current.shapes.length;
-
-    const actions = [];
-    for (let i = 0; i < rotationsNeeded; i++) {
-      actions.push('ROTATE');
-    }
-
-    const deltaX = this.ghost.x - this.current.x;
-    if (deltaX !== 0) {
-      const horizontalAction = deltaX > 0 ? 'MOVE_RIGHT' : 'MOVE_LEFT';
-      for (let i = 0; i < Math.abs(deltaX); i++) {
-        actions.push(horizontalAction);
-      }
-    }
-
-    actions.push('SOFT_DROP');
-
-    this.botPlan = {
-      pieceId: this.current.typeId
-    };
-
-    this.botActionQueue = actions;
-    this.releaseHorizontalKeys();
-  }
-
-  releaseHorizontalKeys() {
-    this.keys.left = false;
-    this.keys.right = false;
-    this.dasTimer = 0;
-  }
-
-  applyBotHorizontalHold(dir) {
-    const pieceReady = this.current && this.areTimer === 0;
-    if (dir < 0) {
-      if (!this.keys.left) {
-        this.keys.left = true;
-        this.keys.right = false;
-        if (pieceReady) this.move(-1);
-        this.dasTimer = 0;
-      }
-    } else if (dir > 0) {
-      if (!this.keys.right) {
-        this.keys.right = true;
-        this.keys.left = false;
-        if (pieceReady) this.move(1);
-        this.dasTimer = 0;
-      }
-    }
-  }
-
-  applyBotControl(deltaTime = 0) {
-    // 1. Validaciones bÃ¡sicas de seguridad
-    if (!this.iaAssist || !this.current || this.areTimer > 0) return;
-
-    if (!this.ghost) {
-      this.botPlan = null;
-      this.botActionQueue = [];
-      return;
-    }
-
-    if (this.botPlan && this.botPlan.pieceId !== this.current.typeId) {
-      console.warn('[AGENT][botPlan] Fast-Fail: la pieza activa cambiÃ³ antes de terminar la animaciÃ³n.');
-      this.botPlan = null;
-      this.botActionQueue = [];
-      this.releaseHorizontalKeys();
-      return;
-    }
-
-    if (this.botActionQueue.length === 0) {
-      this.prepareBotPlanFromGhost();
-    }
-
-    if (this.botActionQueue.length === 0) return;
-
-    this.botActionTimer += deltaTime;
-    if (this.botActionTimer < this.BOT_ACTION_INTERVAL) return;
-    this.botActionTimer = 0;
-
-    const action = this.botActionQueue.shift();
-    const success = this.executeBotAction(action);
-
-    if (!success) {
-      console.warn('[AGENT][botPlan] Fast-Fail: acciÃ³n bloqueada, abortando secuencia.');
-      this.botPlan = null;
-      this.botActionQueue = [];
-      this.releaseHorizontalKeys();
-    }
-  }
-
-  executeBotAction(action) {
-    if (!this.current || this.areTimer > 0) return false;
-
-    switch (action) {
-      case 'ROTATE': {
-        if (typeof this.mayRotate === 'function' && !this.mayRotate()) return false;
-        return this.attemptBotRotateWithWallKick();
-      }
-      case 'MOVE_LEFT':
-      case 'MOVE_RIGHT': {
-        const dir = action === 'MOVE_LEFT' ? -1 : 1;
-        const prevX = this.current.x;
-        this.move(dir);
-        return this.current && this.current.x !== prevX;
-      }
-      case 'DROP':
-      case 'SOFT_DROP': {
-        return this.performBotSoftDrop();
-      }
-      default:
-        return false;
-    }
-  }
-
-  performBotSoftDrop() {
-    const result = this.botSoftDropStep();
-    if (result === 'MOVED') {
-      this.botActionQueue.unshift('SOFT_DROP');
-      return true;
-    }
-    return result === 'LOCKED';
-  }
-
-  botSoftDropStep() {
-    if (!this.current || this.areTimer > 0) return 'BLOCKED';
-    if (!this.collides(this.current.matrix, this.current.x, this.current.y + 1)) {
-      this.current.y++;
-      this.render();
-      return 'MOVED';
-    }
-    this.lockPiece();
-    return 'LOCKED';
-  }
-
-  handleHorizontalInput(deltaTime) {
-    if (!this.current || this.areTimer > 0) return;
-
-    if (this.keys.left || this.keys.right) {
-      this.dasTimer += deltaTime;
-      if (this.dasTimer >= this.DAS_DELAY) {
-        while (this.dasTimer >= this.DAS_DELAY + this.ARR_DELAY) {
-          this.move(this.keys.left ? -1 : 1);
-          this.dasTimer -= this.ARR_DELAY;
-          if (!this.current || this.areTimer > 0) break;
-        }
-      }
-    } else {
-      this.dasTimer = 0;
-    }
-  }
-
-  handleGravity(deltaTime) {
-    if (!this.current || this.areTimer > 0) return;
-
-    const botIsSoftDropping =
-      this.iaAssist &&
-      this.botActionQueue &&
-      this.botActionQueue.length > 0 &&
-      this.botActionQueue[0] === 'SOFT_DROP';
-
-    if (botIsSoftDropping) return;
-
-    const gravitySpeed = Math.max(50, 1000 - (this.level * 50));
-    
-    // --- CAMBIO AQUÃ ---
-    // Si se presiona abajo, usamos SOFT_DROP_DELAY.
-    // Usamos Math.min para asegurar que el Soft Drop nunca sea 
-    // mÃ¡s lento que la gravedad natural (en niveles muy altos).
-    const currentSpeed = this.keys.down 
-        ? Math.min(this.SOFT_DROP_DELAY, gravitySpeed) 
-        : gravitySpeed;
-    // -------------------
-
-    this.fallAccumulator += deltaTime;
-    while (this.fallAccumulator >= currentSpeed) {
-      this.applyGravity();
-      this.fallAccumulator -= currentSpeed;
-      if (!this.current || this.areTimer > 0) break;
-    }
-  }
-
-  move(dir) {
-    if (!this.current || this.areTimer > 0) return;
-    if (!this.collides(this.current.matrix, this.current.x + dir, this.current.y)) {
-      this.current.x += dir;
-      this.render(); 
-    }
-  }
-
-  rotate() {
-    if (!this.current || this.areTimer > 0) return;
-    // Calcular siguiente Ã­ndice de rotaciÃ³n
-    const nextRotation = (this.current.rotation + 1) % this.current.shapes.length;
-    const nextMatrix = this.current.shapes[nextRotation];
-
-    // Verificar si la rotaciÃ³n es vÃ¡lida (colisiÃ³n bÃ¡sica)
-    // Nota: AquÃ­ se podrÃ­an agregar "Wall Kicks" (intentar mover x-1, x+1) si falla
-    if (!this.collides(nextMatrix, this.current.x, this.current.y)) {
-      this.current.rotation = nextRotation;
-      this.current.matrix = nextMatrix;
-      this.render();
-    }
-  }
-
-  attemptBotRotateWithWallKick() {
-    if (!this.current || this.areTimer > 0) return false;
-
-    const nextRotation = (this.current.rotation + 1) % this.current.shapes.length;
-    const nextMatrix = this.current.shapes[nextRotation];
-    const offsets = [0, 1, -1, 2, -2];
-
-    for (const offset of offsets) {
-      const candidateX = this.current.x + offset;
-      if (!this.collides(nextMatrix, candidateX, this.current.y)) {
-        this.current.x = candidateX;
-        this.current.rotation = nextRotation;
-        this.current.matrix = nextMatrix;
-        this.render();
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  hardDrop() {
-    if (!this.current || this.areTimer > 0) return;
-    // Reutilizamos getDropY() que ya tenÃ­as para el Ghost
-    const y = this.getDropY();
-    this.score += (y - this.current.y) * 2; // Puntos extra
-    this.current.y = y;
-    this.lockPiece(); // Fijar inmediatamente
-    this.render();
-  }
-
-  holdPiece() {
-    console.warn('[AGENT] Hold de pieza no implementado.');
-  }
-
-  // Helper necesario para que el evaluador vea el futuro con lÃ­neas limpiadas
-  getSimulatedBoardWithLines(matrix, px, py) {
-    if (!matrix || !Array.isArray(matrix) || !Array.isArray(this.board)) {
-      console.warn('[AGENT][botThink] Fast-Fail: datos invÃ¡lidos para simular tablero.');
-      return null;
-    }
-
-    const clone = this.board.map(row => [...row]);
-    let invalidProjection = false;
-
-    for (let dy = 0; dy < matrix.length; dy++) {
-      for (let dx = 0; dx < matrix[dy].length; dx++) {
-        if (!matrix[dy][dx]) continue;
-        const ny = py + dy;
-        const nx = px + dx;
-        if (ny < 0 || ny >= ROWS || nx < 0 || nx >= COLS) {
-          invalidProjection = true;
-          break;
-        }
-        clone[ny][nx] = this.current.typeId;
-      }
-      if (invalidProjection) break;
-    }
-
-    if (invalidProjection) {
-      console.warn('[AGENT][botThink] Fast-Fail: proyecciÃ³n fuera de los lÃ­mites del tablero.');
-      return null;
-    }
-
-    let filtered = clone.filter(row => row.some(cell => cell === -1));
-    const linesCleared = ROWS - filtered.length;
-    while (filtered.length < ROWS) {
-      filtered.unshift(Array(COLS).fill(-1));
-    }
-
-    return {board: filtered, linesCleared};
-  }
-
-  getDropY() {
-    let y = this.current.y;
-    while (!this.collides(this.current.matrix, this.current.x, y + 1)) {
-      y++;
-    }
-    return y;
-  }
-
-  applyGravity() {
-    if (!this.current || this.areTimer > 0) return;
-    if (!this.collides(this.current.matrix, this.current.x, this.current.y + 1)) {
-      this.current.y++;
-      this.render();
-    } else {
-      this.lockPiece();
-    }
-  }
-
-  lockPiece() {
-    if (this.isAnimating || this.isGameOverAnimating) return;
-    if (!this.current || !this.current.matrix) {
-      console.error('[AGENT] Pieza no disponible para bloquear.');
-      return;
-    }
-    if (!Array.isArray(this.board)) {
-      console.error('[AGENT] Tablero invÃ¡lido, abortando bloqueo.');
-      return;
-    }
-
-    const placements = [];
-    let invalidPlacement = false;
-
-    this.current.matrix.forEach((row, dy) => {
-      row.forEach((val, dx) => {
-        if (!val) return;
-        const ny = this.current.y + dy;
-        const nx = this.current.x + dx;
-        if (ny < 0 || ny >= ROWS || nx < 0 || nx >= COLS) {
-          invalidPlacement = true;
-          return;
-        }
-        if (this.board[ny][nx] !== -1) {
-          invalidPlacement = true;
-          return;
-        }
-        placements.push({ x: nx, y: ny });
-      });
-    });
-
-    if (invalidPlacement) {
-      console.error('[AGENT] ColisiÃ³n simulada o fuera de lÃ­mites al bloquear pieza.');
-      this.triggerGameOver();
-      return;
-    }
-
-    placements.forEach(({ x, y }) => {
-      this.board[y][x] = this.current.typeId;
-    });
-
-    const rowsToClear = [];
-    for (let r = 0; r < ROWS; r++) {
-      if (this.board[r].every(cell => cell !== -1)) {
-        rowsToClear.push(r);
-      }
-    }
-
-    if (rowsToClear.length > 0) {
-      this.isAnimating = true;
-      this.rowsToClear = rowsToClear;
-      this.current = null;
-      this.render();
-
-      setTimeout(() => {
-        this.board = this.board.filter(row => row.some(cell => cell === -1));
-        const linesCleared = rowsToClear.length;
-        this.score += linesCleared * 100;
-        this.lines += linesCleared;
-
-        while (this.board.length < ROWS) {
-          this.board.unshift(Array(COLS).fill(-1));
-        }
-
-        this.finishTurn(linesCleared);
-      }, 400);
-    } else {
-      this.finishTurn(0);
-    }
-  }
-
-  finishTurn(linesCleared) {
-    this.isAnimating = false;
-    this.rowsToClear = null;
-
-    if (this.els.lines) this.els.lines.textContent = this.lines;
-    if (this.els.score) this.els.score.textContent = this.score;
-
-    this.ghost = null;
-    this.botPlan = null;
-    this.botActionQueue = [];
-    this.botActionTimer = 0;
-    this.renderNext();
-
-    this.current = null;
-    this.areTimer = this.ARE_DELAY;
-    this.fallAccumulator = 0;
-    this.render();
-  }
-
-  // --- NUEVA SECUENCIA DE GAME OVER ---
-  triggerGameOver() {
-    if (this.isGameOverAnimating) return;
-    this.gameOver = true;
-    this.paused = true;
-    this.isGameOverAnimating = true;
-    this.stopTimer();
-    this.hideActiveBlocks();
-    const btn = this.els.playBtn;
-    if (btn) btn.textContent = 'â–¶ Play';
-
-    this.runGameOverDestruction();
-  }
-
-  runGameOverDestruction() {
-    if (!this.isGameOverAnimating) return;
-    if (!Array.isArray(this.board)) {
-      console.error('[AGENT][GameOver] Tablero invÃ¡lido, abortando destrucciÃ³n.');
-      this.isGameOverAnimating = false;
-      this.showGameOverScreen();
-      return;
-    }
-
-    const occupied = [];
-    for (let y = 0; y < ROWS; y++) {
-      for (let x = 0; x < COLS; x++) {
-        if (this.board[y][x] !== -1 && this.board[y][x] !== -2) {
-          occupied.push({ x, y });
-        }
-      }
-    }
-
-    if (occupied.length === 0) {
-      this.isGameOverAnimating = false;
-      this.showGameOverScreen();
-      return;
-    }
-
-    const idx = Math.floor(Math.random() * occupied.length);
-    const target = occupied[idx];
-    this.board[target.y][target.x] = -2;
-    this.render();
-
-    setTimeout(() => {
-      if (!this.isGameOverAnimating) return;
-      this.board[target.y][target.x] = -1;
-      this.runGameOverDestruction();
-    }, 20);
-  }
-
-  togglePause() {
-    if (this.isGameOverAnimating) return;
-    this.paused = !this.paused;
-    const btn = this.els.playBtn;
-
-    if (this.paused) {
-      this.els.gameMessage?.style.setProperty('display', 'block');
-      this.pauseTimer();
-      if (btn) btn.textContent = 'â–¶ Play'; // Cambio visual a Play
-    } else if (!this.gameOver) {
-      this.els.gameMessage?.style.setProperty('display', 'none');
-      this.resumeTimer();
-      if (btn) btn.textContent = 'â¸ Pause'; // Cambio visual a Pause
-    }
-  }
-
-  showGameOverScreen() {
-    this.els.gameMessage?.style.setProperty('display', 'block');
-    const el = this.els.gameOver;
-    if (!el) return;
-
-    el.innerHTML = `
-        <h2>GAME OVER</h2>
-        <p>SCORE FINAL</p>
-        <div class="final-score">${this.score}</div>
-        <p>Lines: ${this.lines}</p>
-        <button class="btn-primary retryBtn">TRY AGAIN</button>
-    `;
-    
-    // Activar botÃ³n de reintento
-    const retryBtn = el.querySelector('.retryBtn');
-    retryBtn.onclick = () => this.reset();
-
-    el.style.display = 'flex';
-  }
-
-  reset() {
-    const goScreen = this.els.gameOver;
-    if (goScreen) goScreen.style.display = 'none';
-    this.els.gameMessage?.style.setProperty('display', 'block');
-    this.gameOver = false;
-    this.isGameOverAnimating = false;
-    this.board = Array.from({length: ROWS}, () => Array(COLS).fill(-1));
-    this.bag = [];
-    this.initBag();
-    this.next = this.getNextPieceType();
-    this.spawnNewPiece();
-    this.paused = true;
-    this.isAnimating = false;
-    this.rowsToClear = null;
-    const btn = this.els.playBtn;
-    if (btn) btn.textContent = 'â–¶ Play';
-    this.score = 0;
-    this.lines = 0;
-    this.lastTime = 0;
-    this.areTimer = 0;
-    this.dasTimer = 0;
-    this.fallAccumulator = 0;
-    this.botPlan = null;
-    this.keys = { left: false, right: false, down: false };
-    this.elapsedMs = 0;
-    this.isBotThinking = false;
-    this.pendingBotRequestId = null;
-    this.ghost = null;
-    this.botActionTimer = 0;
-    this.botMode = null;
-    this.stopTimer();
-    this.updateTimerDisplay();
-    if (this.els.score) this.els.score.textContent = this.score;
-    if (this.els.lines) this.els.lines.textContent = this.lines;
-    this.render();
-    this.renderNext();
-    this.updateIndicator();
-  }
-
-  loop(time = 0) {
-    const deltaTime = this.lastTime ? time - this.lastTime : 0;
-    this.lastTime = time;
-
-    if (!this.paused && !this.gameOver && !this.isGameOverAnimating) {
-      if (this.areTimer > 0) {
-        this.areTimer = Math.max(0, this.areTimer - deltaTime);
-      } else {
-        if (!this.current && !this.isAnimating && !this.isGameOverAnimating) {
-          this.spawnNewPiece();
-        }
-
-        if (this.current && !this.isAnimating && !this.isGameOverAnimating) {
-          if (this.iaAssist) {
-            this.applyBotControl(deltaTime);
-          }
-          this.handleHorizontalInput(deltaTime);
-          this.handleGravity(deltaTime);
-        }
-      }
-    }
-    requestAnimationFrame((t) => this.loop(t));
-  }
-
-  startTimer() {
-    if (this.timerInterval) return;
-    this.timerAnchor = performance.now();
-    this.timerInterval = setInterval(() => this.tickTimer(), 250);
-  }
-
-  resumeTimer() {
-    if (!this.timerInterval) this.startTimer();
-    this.timerAnchor = performance.now();
-  }
-
-  pauseTimer() {
-    if (this.timerAnchor !== null) {
-      this.elapsedMs += performance.now() - this.timerAnchor;
-      this.timerAnchor = null;
-      this.updateTimerDisplay();
-    }
-  }
-
-  stopTimer() {
-    this.pauseTimer();
-    if (this.timerInterval) {
-      clearInterval(this.timerInterval);
-      this.timerInterval = null;
-    }
-  }
-
-  tickTimer() {
-    if (this.paused || this.gameOver || this.timerAnchor === null) return;
-    const now = performance.now();
-    this.elapsedMs += now - this.timerAnchor;
-    this.timerAnchor = now;
-    this.updateTimerDisplay();
-  }
-
-  updateTimerDisplay() {
-    if (!this.timerDisplay) return;
-    const totalSeconds = Math.floor(this.elapsedMs / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    this.timerDisplay.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  }
-
-  
-}
-
-window.addEventListener('load', () => {
-  const playerRoot = document.querySelector('.player-instance');
-  const cpuRoot = document.querySelector('.cpu-instance');
-  if (!playerRoot || !cpuRoot) {
-    console.error('[AGENT][bootstrap] Fast-Fail: faltan roots de jugador o CPU.');
-    return;
-  }
-
-  const games = [
-    new TetrisGame(playerRoot, { playerName: 'P1' }),
-    new TetrisGame(cpuRoot, { playerName: 'CPU', isCPU: true })
-  ];
-  requestAnimationFrame(() => games.forEach(syncBoardScale));
-
-  window.addEventListener('resize', () => {
-    clearTimeout(window.resizeTimer);
-    window.resizeTimer = setTimeout(() => games.forEach(syncBoardScale), 50);
-  });
-
-  window.addEventListener('orientationchange', () => games.forEach(syncBoardScale));
-  document.addEventListener('fullscreenchange', () => games.forEach(syncBoardScale));
-});
+        thëN8¶‰Ëkºwµç}A}1d¸4(€€€€¼¼UÍ…µ½Ì5…Ñ ¹µ¥¸Á…É„…Í•ÕÉ…ÈÅÕ”•°M½™ĞÉ½À¹Õ¹„Í•„€4(€€€€¼¼·…Ì±•¹Ñ¼ÅÕ”±„É…Ù•‘…¹…ÑÕÉ…°€¡•¸¹¥Ù•±•ÌµÕä…±Ñ½Ì¤¸4(€€€½¹ÍĞÕÉÉ•¹ÑMÁ••€ôÑ¡¥Ì¹­•åÌ¹‘½İ¸€4(€€€€€€€€ü5…Ñ ¹µ¥¸¡Ñ¡¥Ì¹M=Q}I=A}1d°É…Ù¥ÑåMÁ••¤€4(€€€€€€€€èÉ…Ù¥ÑåMÁ••ì4(€€€€¼¼€´´´´´´´´´´´´´´´´´´´4(4(€€€Ñ¡¥Ì¹™…±±ÕµÕ±…Ñ½È€¬ô‘•±Ñ…Q¥µ”ì4(€€€İ¡¥±”€¡Ñ¡¥Ì¹™…±±ÕµÕ±…Ñ½È€øôÕÉÉ•¹ÑMÁ••¤ì4(€€€€€Ñ¡¥Ì¹…ÁÁ±åÉ…Ù¥Ñä ¤ì4(€€€€€Ñ¡¥Ì¹™…±±ÕµÕ±…Ñ½È€´ôÕÉÉ•¹ÑMÁ••ì4(€€€€€¥˜€ …Ñ¡¥Ì¹ÕÉÉ•¹ĞñğÑ¡¥Ì¹…É•Q¥µ•È€ø€À¤‰É•…¬ì4(€€€ô4(€ô4(4(€µ½Ù”¡‘¥È¤ì4(€€€¥˜€ …Ñ¡¥Ì¹ÕÉÉ•¹ĞñğÑ¡¥Ì¹…É•Q¥µ•È€ø€À¤É•ÑÕÉ¸ì4(€€€¥˜€ …Ñ¡¥Ì¹½±±¥‘•Ì¡Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹µ…ÑÉ¥à°Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹à€¬‘¥È°Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹ä¤¤ì4(€€€€€Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹à€¬ô‘¥Èì4(€€€€€Ñ¡¥Ì¹É•¹‘•È ¤ì€4(€€€ô4(€ô4(4(€É½Ñ…Ñ” ¤ì4(€€€¥˜€ …Ñ¡¥Ì¹ÕÉÉ•¹ĞñğÑ¡¥Ì¹…É•Q¥µ•È€ø€À¤É•ÑÕÉ¸ì4(€€€€¼¼…±Õ±…ÈÍ¥Õ¥•¹Ñ”ƒµ¹‘¥”‘”É½Ñ…§Í¸4(€€€½¹ÍĞ¹•áÑI½Ñ…Ñ¥½¸€ô€¡Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹É½Ñ…Ñ¥½¸€¬€Ä¤€”Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹Í¡…Á•Ì¹±•¹Ñ ì4(€€€½¹ÍĞ¹•áÑ5…ÑÉ¥à€ôÑ¡¥Ì¹ÕÉÉ•¹Ğ¹Í¡…Á•Ím¹•áÑI½Ñ…Ñ¥½¹tì4(4(€€€€¼¼Y•É¥™¥…ÈÍ¤±„É½Ñ…§Í¸•ÌÛ…±¥‘„€¡½±¥Í§Í¸‹…Í¥„¤4(€€€€¼¼9½Ñ„èÅ×´Í”Á½‘Ëµ…¸…É•…È€‰]…±°-¥­Ìˆ€¡¥¹Ñ•¹Ñ…Èµ½Ù•Èà´Ä°à¬Ä¤Í¤™…±±„4(€€€¥˜€ …Ñ¡¥Ì¹½±±¥‘•Ì¡¹•áÑ5…ÑÉ¥à°Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹à°Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹ä¤¤ì4(€€€€€Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹É½Ñ…Ñ¥½¸€ô¹•áÑI½Ñ…Ñ¥½¸ì4(€€€€€Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹µ…ÑÉ¥à€ô¹•áÑ5…ÑÉ¥àì4(€€€€€Ñ¡¥Ì¹É•¹‘•È ¤ì4(€€€ô4(€ô4(4(€…ÑÑ•µÁÑ	½ÑI½Ñ…Ñ•]¥Ñ¡]…±±-¥¬ ¤ì4(€€€¥˜€ …Ñ¡¥Ì¹ÕÉÉ•¹ĞñğÑ¡¥Ì¹…É•Q¥µ•È€ø€À¤É•ÑÕÉ¸™…±Í”ì4(4(€€€½¹ÍĞ¹•áÑI½Ñ…Ñ¥½¸€ô€¡Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹É½Ñ…Ñ¥½¸€¬€Ä¤€”Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹Í¡…Á•Ì¹±•¹Ñ ì4(€€€½¹ÍĞ¹•áÑ5…ÑÉ¥à€ôÑ¡¥Ì¹ÕÉÉ•¹Ğ¹Í¡…Á•Ím¹•áÑI½Ñ…Ñ¥½¹tì4(€€€½¹ÍĞ½™™Í•ÑÌ€ôlÀ°€Ä°€´Ä°€È°€´Étì4(4(€€€™½È€¡½¹ÍĞ½™™Í•Ğ½˜½™™Í•ÑÌ¤ì4(€€€€€½¹ÍĞ…¹‘¥‘…Ñ•`€ôÑ¡¥Ì¹ÕÉÉ•¹Ğ¹à€¬½™™Í•Ğì4(€€€€€¥˜€ …Ñ¡¥Ì¹½±±¥‘•Ì¡¹•áÑ5…ÑÉ¥à°…¹‘¥‘…Ñ•`°Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹ä¤¤ì4(€€€€€€€Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹à€ô…¹‘¥‘…Ñ•`ì4(€€€€€€€Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹É½Ñ…Ñ¥½¸€ô¹•áÑI½Ñ…Ñ¥½¸ì4(€€€€€€€Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹µ…ÑÉ¥à€ô¹•áÑ5…ÑÉ¥àì4(€€€€€€€Ñ¡¥Ì¹É•¹‘•È ¤ì4(€€€€€€€É•ÑÕÉ¸ÑÉÕ”ì4(€€€€€ô4(€€€ô4(4(€€€É•ÑÕÉ¸™…±Í”ì4(€ô4(4(€¡…É‘É½À ¤ì4(€€€¥˜€ …Ñ¡¥Ì¹ÕÉÉ•¹ĞñğÑ¡¥Ì¹…É•Q¥µ•È€ø€À¤É•ÑÕÉ¸ì4(€€€€¼¼I•ÕÑ¥±¥é…µ½Ì•ÑÉ½Ád ¤ÅÕ”å„Ñ•»µ…ÌÁ…É„•°¡½ÍĞ4(€€€½¹ÍĞä€ôÑ¡¥Ì¹•ÑÉ½Ád ¤ì4(€€€Ñ¡¥Ì¹Í½É”€¬ô€¡ä€´Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹ä¤€¨€Èì€¼¼AÕ¹Ñ½Ì•áÑÉ„4(€€€Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹ä€ôäì4(€€€Ñ¡¥Ì¹±½­A¥•” ¤ì€¼¼¥©…È¥¹µ•‘¥…Ñ…µ•¹Ñ”4(€€€Ñ¡¥Ì¹É•¹‘•È ¤ì4(€ô4(4(€¡½±‘A¥•” ¤ì4(€€€½¹Í½±”¹İ…É¸ m9Qt!½±‘”Á¥•é„¹¼¥µÁ±•µ•¹Ñ…‘¼¸œ¤ì4(€ô4(4(€€¼¼!•±Á•È¹••Í…É¥¼Á…É„ÅÕ”•°•Ù…±Õ…‘½ÈÙ•„•°™ÕÑÕÉ¼½¸³µ¹•…Ì±¥µÁ¥…‘…Ì4(€•ÑM¥µÕ±…Ñ•‘	½…É‘]¥Ñ¡1¥¹•Ì¡µ…ÑÉ¥à°Áà°Áä¤ì4(€€€¥˜€ …µ…ÑÉ¥àñğ€…ÉÉ…ä¹¥ÍÉÉ…ä¡µ…ÑÉ¥à¤ñğ€…ÉÉ…ä¹¥ÍÉÉ…ä¡Ñ¡¥Ì¹‰½…É¤¤ì4(€€€€€½¹Í½±”¹İ…É¸ m9Qum‰½ÑQ¡¥¹­t…ÍĞµ…¥°è‘…Ñ½Ì¥¹Û…±¥‘½ÌÁ…É„Í¥µÕ±…ÈÑ…‰±•É¼¸œ¤ì4(€€€€€É•ÑÕÉ¸¹Õ±°ì4(€€€ô4(4(€€€½¹ÍĞ±½¹”€ôÑ¡¥Ì¹‰½…É¹µ…À¡É½Ü€ôøl¸¸¹É½İt¤ì4(€€€±•Ğ¥¹Ù…±¥‘AÉ½©•Ñ¥½¸€ô™…±Í”ì4(4(€€€™½È€¡±•Ğ‘ä€ô€Àì‘ä€ğµ…ÑÉ¥à¹±•¹Ñ ì‘ä¬¬¤ì4(€€€€€™½È€¡±•Ğ‘à€ô€Àì‘à€ğµ…ÑÉ¥ám‘åt¹±•¹Ñ ì‘à¬¬¤ì4(€€€€€€€¥˜€ …µ…ÑÉ¥ám‘åum‘át¤½¹Ñ¥¹Õ”ì4(€€€€€€€½¹ÍĞ¹ä€ôÁä€¬‘äì4(€€€€€€€½¹ÍĞ¹à€ôÁà€¬‘àì4(€€€€€€€¥˜€¡¹ä€ğ€Àñğ¹ä€øôI=]Lñğ¹à€ğ€Àñğ¹à€øô=1L¤ì4(€€€€€€€€€¥¹Ù…±¥‘AÉ½©•Ñ¥½¸€ôÑÉÕ”ì4(€€€€€€€€€‰É•…¬ì4(€€€€€€€ô4(€€€€€€€±½¹•m¹åum¹át€ôÑ¡¥Ì¹ÕÉÉ•¹Ğ¹ÑåÁ•%ì4(€€€€€ô4(€€€€€¥˜€¡¥¹Ù…±¥‘AÉ½©•Ñ¥½¸¤‰É•…¬ì4(€€€ô4(4(€€€¥˜€¡¥¹Ù…±¥‘AÉ½©•Ñ¥½¸¤ì4(€€€€€½¹Í½±”¹İ…É¸ m9Qum‰½ÑQ¡¥¹­t…ÍĞµ…¥°èÁÉ½å•§Í¸™Õ•É„‘”±½Ì³µµ¥Ñ•Ì‘•°Ñ…‰±•É¼¸œ¤ì4(€€€€€É•ÑÕÉ¸¹Õ±°ì4(€€€ô4(4(€€€±•Ğ™¥±Ñ•É•€ô±½¹”¹™¥±Ñ•È¡É½Ü€ôøÉ½Ü¹Í½µ”¡•±°€ôø•±°€ôôô€´Ä¤¤ì4(€€€½¹ÍĞ±¥¹•Í±•…É•€ôI=]L€´™¥±Ñ•É•¹±•¹Ñ ì4(€€€İ¡¥±”€¡™¥±Ñ•É•¹±•¹Ñ €ğI=]L¤ì4(€€€€€™¥±Ñ•É•¹Õ¹Í¡¥™Ğ¡ÉÉ…ä¡=1L¤¹™¥±° ´Ä¤¤ì4(€€€ô4(4(€€€É•ÑÕÉ¸í‰½…Éè™¥±Ñ•É•°±¥¹•Í±•…É•‘ôì4(€ô4(4(€•ÑÉ½Ád ¤ì4(€€€±•Ğä€ôÑ¡¥Ì¹ÕÉÉ•¹Ğ¹äì4(€€€İ¡¥±”€ …Ñ¡¥Ì¹½±±¥‘•Ì¡Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹µ…ÑÉ¥à°Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹à°ä€¬€Ä¤¤ì4(€€€€€ä¬¬ì4(€€€ô4(€€€É•ÑÕÉ¸äì4(€ô4(4(€…ÁÁ±åÉ…Ù¥Ñä ¤ì4(€€€¥˜€ …Ñ¡¥Ì¹ÕÉÉ•¹ĞñğÑ¡¥Ì¹…É•Q¥µ•È€ø€À¤É•ÑÕÉ¸ì4(€€€¥˜€ …Ñ¡¥Ì¹½±±¥‘•Ì¡Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹µ…ÑÉ¥à°Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹à°Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹ä€¬€Ä¤¤ì4(€€€€€Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹ä¬¬ì4(€€€€€Ñ¡¥Ì¹É•¹‘•È ¤ì4(€€€ô•±Í”ì4(€€€€€Ñ¡¥Ì¹±½­A¥•” ¤ì4(€€€ô4(€ô4(4(€±½­A¥•” ¤ì4(€€€¥˜€¡Ñ¡¥Ì¹¥Í¹¥µ…Ñ¥¹œñğÑ¡¥Ì¹¥Í…µ•=Ù•É¹¥µ…Ñ¥¹œ¤É•ÑÕÉ¸ì4(€€€¥˜€ …Ñ¡¥Ì¹ÕÉÉ•¹Ğñğ€…Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹µ…ÑÉ¥à¤ì4(€€€€€½¹Í½±”¹•ÉÉ½È m9QtA¥•é„¹¼‘¥ÍÁ½¹¥‰±”Á…É„‰±½ÅÕ•…È¸œ¤ì4(€€€€€É•ÑÕÉ¸ì4(€€€ô4(€€€¥˜€ …ÉÉ…ä¹¥ÍÉÉ…ä¡Ñ¡¥Ì¹‰½…É¤¤ì4(€€€€€½¹Í½±”¹•ÉÉ½È m9QtQ…‰±•É¼¥¹Û…±¥‘¼°…‰½ÉÑ…¹‘¼‰±½ÅÕ•¼¸œ¤ì4(€€€€€É•ÑÕÉ¸ì4(€€€ô4(4(€€€½¹ÍĞÁ±…•µ•¹ÑÌ€ômtì4(€€€±•Ğ¥¹Ù…±¥‘A±…•µ•¹Ğ€ô™…±Í”ì4(4(€€€Ñ¡¥Ì¹ÕÉÉ•¹Ğ¹µ…ÑÉ¥à¹™½É…  ¡É½Ü°‘ä¤€ôøì4(€€€€€É½Ü¹™½É…  ¡Ù…°°‘à¤€ôøì4(€€€€€€€¥˜€ …Ù…°¤É•ÑÕÉ¸ì4(€€€€€€€½¹ÍĞ¹ä€ôÑ¡¥Ì¹ÕÉÉ•¹Ğ¹ä€¬‘äì4(€€€€€€€½¹ÍĞ¹à€ôÑ¡¥Ì¹ÕÉÉ•¹Ğ¹à€¬‘àì4(€€€€€€€¥˜€¡¹ä€ğ€Àñğ¹ä€øôI=]Lñğ¹à€ğ€Àñğ¹à€øô=1L¤ì4(€€€€€€€€€¥¹Ù…±¥‘A±…•µ•¹Ğ€ôÑÉÕ”ì4(€€€€€€€€€É•ÑÕÉ¸ì4(€€€€€€€ô4(€€€€€€€¥˜€¡Ñ¡¥Ì¹‰½…É‘m¹åum¹át€„ôô€´Ä¤ì4(€€€€€€€€€¥¹Ù…±¥‘A±…•µ•¹Ğ€ôÑÉÕ”ì4(€€€€€€€€€É•ÑÕÉ¸ì4(€€€€€€€ô4(€€€€€€€Á±…•µ•¹ÑÌ¹ÁÕÍ ¡ìàè¹à°äè¹äô¤ì4(€€€€€ô¤ì4(€€€ô¤ì4(4(€€€¥˜€¡¥¹Ù…±¥‘A±…•µ•¹Ğ¤ì4(€€€€€½¹Í½±”¹•ÉÉ½È m9Qt½±¥Í§Í¸Í¥µÕ±…‘„¼™Õ•É„‘”³µµ¥Ñ•Ì…°‰±½ÅÕ•…ÈÁ¥•é„¸œ¤ì4(€€€€€Ñ¡¥Ì¹ÑÉ¥•É…µ•=Ù•È ¤ì4(€€€€€É•ÑÕÉ¸ì4(€€€ô4(4(€€€Á±…•µ•¹ÑÌ¹™½É…  ¡ìà°äô¤€ôøì4(€€€€€Ñ¡¥Ì¹‰½…É‘måumát€ôÑ¡¥Ì¹ÕÉÉ•¹Ğ¹ÑåÁ•%ì4(€€€ô¤ì4(4(€€€½¹ÍĞÉ½İÍQ½±•…È€ômtì4(€€€™½È€¡±•ĞÈ€ô€ÀìÈ€ğI=]LìÈ¬¬¤ì4(€€€€€¥˜€¡Ñ¡¥Ì¹‰½…É‘mÉt¹•Ù•Éä¡•±°€ôø•±°€„ôô€´Ä¤¤ì4(€€€€€€€É½İÍQ½±•…È¹ÁÕÍ ¡È¤ì4(€€€€€ô4(€€€ô4(4(€€€¥˜€¡É½İÍQ½±•…È¹±•¹Ñ €ø€À¤ì4(€€€€€Ñ¡¥Ì¹¥Í¹¥µ…Ñ¥¹œ€ôÑÉÕ”ì4(€€€€€Ñ¡¥Ì¹É½İÍQ½±•…È€ôÉ½İÍQ½±•…Èì4(€€€€€Ñ¡¥Ì¹ÕÉÉ•¹Ğ€ô¹Õ±°ì4(€€€€€Ñ¡¥Ì¹É•¹‘•È ¤ì4(4(€€€€€Í•ÑQ¥µ•½ÕĞ  ¤€ôøì4(€€€€€€€Ñ¡¥Ì¹‰½…É€ôÑ¡¥Ì¹‰½…É¹™¥±Ñ•È¡É½Ü€ôøÉ½Ü¹Í½µ”¡•±°€ôø•±°€ôôô€´Ä¤¤ì4(€€€€€€€½¹ÍĞ±¥¹•Í±•…É•€ôÉ½İÍQ½±•…È¹±•¹Ñ ì4(€€€€€€€Ñ¡¥Ì¹Í½É”€¬ô±¥¹•Í±•…É•€¨€ÄÀÀì4(€€€€€€€Ñ¡¥Ì¹±¥¹•Ì€¬ô±¥¹•Í±•…É•ì4(4(€€€€€€€İ¡¥±”€¡Ñ¡¥Ì¹‰½…É¹±•¹Ñ €ğI=]L¤ì4(€€€€€€€€€Ñ¡¥Ì¹‰½…É¹Õ¹Í¡¥™Ğ¡ÉÉ…ä¡=1L¤¹™¥±° ´Ä¤¤ì4(€€€€€€€ô4(4(€€€€€€€Ñ¡¥Ì¹™¥¹¥Í¡QÕÉ¸¡±¥¹•Í±•…É•¤ì4(€€€€€ô°€ĞÀÀ¤ì4(€€€ô•±Í”ì4(€€€€€Ñ¡¥Ì¹™¥¹¥Í¡QÕÉ¸ À¤ì4(€€€ô4(€ô4(4(€™¥¹¥Í¡QÕÉ¸¡±¥¹•Í±•…É•¤ì4(€€€Ñ¡¥Ì¹¥Í¹¥µ…Ñ¥¹œ€ô™…±Í”ì4(€€€Ñ¡¥Ì¹É½İÍQ½±•…È€ô¹Õ±°ì4(4(€€€¥˜€¡Ñ¡¥Ì¹•±Ì¹±¥¹•Ì¤Ñ¡¥Ì¹•±Ì¹±¥¹•Ì¹Ñ•áÑ½¹Ñ•¹Ğ€ôÑ¡¥Ì¹±¥¹•Ìì4(€€€¥˜€¡Ñ¡¥Ì¹•±Ì¹Í½É”¤Ñ¡¥Ì¹•±Ì¹Í½É”¹Ñ•áÑ½¹Ñ•¹Ğ€ôÑ¡¥Ì¹Í½É”ì4(4(€€€Ñ¡¥Ì¹¡½ÍĞ€ô¹Õ±°ì4(€€€Ñ¡¥Ì¹‰½ÑA±…¸€ô¹Õ±°ì4(€€€Ñ¡¥Ì¹‰½ÑÑ¥½¹EÕ•Õ”€ômtì4(€€€Ñ¡¥Ì¹‰½ÑÑ¥½¹Q¥µ•È€ô€Àì4(€€€Ñ¡¥Ì¹É•¹‘•É9•áĞ ¤ì4(4(€€€Ñ¡¥Ì¹ÕÉÉ•¹Ğ€ô¹Õ±°ì4(€€€Ñ¡¥Ì¹…É•Q¥µ•È€ôÑ¡¥Ì¹I}1dì4(€€€Ñ¡¥Ì¹™…±±ÕµÕ±…Ñ½È€ô€Àì4(€€€Ñ¡¥Ì¹É•¹‘•È ¤ì4(€ô4(4(€€¼¼€´´´9UYMU9%5=YH€´´´4(€ÑÉ¥•É…µ•=Ù•È ¤ì4(€€€¥˜€¡Ñ¡¥Ì¹¥Í…µ•=Ù•É¹¥µ…Ñ¥¹œ¤É•ÑÕÉ¸ì4(€€€Ñ¡¥Ì¹…µ•=Ù•È€ôÑÉÕ”ì4(€€€Ñ¡¥Ì¹Á…ÕÍ•€ôÑÉÕ”ì4(€€€Ñ¡¥Ì¹¥Í…µ•=Ù•É¹¥µ…Ñ¥¹œ€ôÑÉÕ”ì4(€€€Ñ¡¥Ì¹ÍÑ½ÁQ¥µ•È ¤ì4(€€€Ñ¡¥Ì¹¡¥‘•Ñ¥Ù•	±½­Ì ¤ì4(€€€½¹ÍĞ‰Ñ¸€ôÑ¡¥Ì¹•±Ì¹Á±…å	Ñ¸ì4(€€€¥˜€¡‰Ñ¸¤‰Ñ¸¹Ñ•áÑ½¹Ñ•¹Ğ€ô€ŸŠZØA±…äœì4(4(€€€Ñ¡¥Ì¹ÉÕ¹…µ•=Ù•É•ÍÑÉÕÑ¥½¸ ¤ì4(€ô4(4(€ÉÕ¹…µ•=Ù•É•ÍÑÉÕÑ¥½¸ ¤ì4(€€€¥˜€ …Ñ¡¥Ì¹¥Í…µ•=Ù•É¹¥µ…Ñ¥¹œ¤É•ÑÕÉ¸ì4(€€€¥˜€ …ÉÉ…ä¹¥ÍÉÉ…ä¡Ñ¡¥Ì¹‰½…É¤¤ì4(€€€€€½¹Í½±”¹•ÉÉ½È m9Qum…µ•=Ù•ÉtQ…‰±•É¼¥¹Û…±¥‘¼°…‰½ÉÑ…¹‘¼‘•ÍÑÉÕ§Í¸¸œ¤ì4(€€€€€Ñ¡¥Ì¹¥Í…µ•=Ù•É¹¥µ…Ñ¥¹œ€ô™…±Í”ì4(€€€€€Ñ¡¥Ì¹Í¡½İ…µ•=Ù•ÉMÉ••¸ ¤ì4(€€€€€É•ÑÕÉ¸ì4(€€€ô4(4(€€€½¹ÍĞ½ÕÁ¥•€ômtì4(€€€™½È€¡±•Ğä€ô€Àìä€ğI=]Lìä¬¬¤ì4(€€€€€™½È€¡±•Ğà€ô€Àìà€ğ=1Lìà¬¬¤ì4(€€€€€€€¥˜€¡Ñ¡¥Ì¹‰½…É‘måumát€„ôô€´Ä€˜˜Ñ¡¥Ì¹‰½…É‘måumát€„ôô€´È¤ì4(€€€€€€€€€½ÕÁ¥•¹ÁÕÍ ¡ìà°äô¤ì4(€€€€€€€ô4(€€€€€ô4(€€€ô4(4(€€€¥˜€¡½ÕÁ¥•¹±•¹Ñ €ôôô€À¤ì4(€€€€€Ñ¡¥Ì¹¥Í…µ•=Ù•É¹¥µ…Ñ¥¹œ€ô™…±Í”ì4(€€€€€Ñ¡¥Ì¹Í¡½İ…µ•=Ù•ÉMÉ••¸ ¤ì4(€€€€€É•ÑÕÉ¸ì4(€€€ô4(4(€€€½¹ÍĞ¥‘à€ô5…Ñ ¹™±½½È¡5…Ñ ¹É…¹‘½´ ¤€¨½ÕÁ¥•¹±•¹Ñ ¤ì4(€€€½¹ÍĞÑ…É•Ğ€ô½ÕÁ¥•‘m¥‘átì4(€€€Ñ¡¥Ì¹‰½…É‘mÑ…É•Ğ¹åumÑ…É•Ğ¹át€ô€´Èì4(€€€Ñ¡¥Ì¹É•¹‘•È ¤ì4(4(€€€Í•ÑQ¥µ•½ÕĞ  ¤€ôøì4(€€€€€¥˜€ …Ñ¡¥Ì¹¥Í…µ•=Ù•É¹¥µ…Ñ¥¹œ¤É•ÑÕÉ¸ì4(€€€€€Ñ¡¥Ì¹‰½…É‘mÑ…É•Ğ¹åumÑ…É•Ğ¹át€ô€´Äì4(€€€€€Ñ¡¥Ì¹ÉÕ¹…µ•=Ù•É•ÍÑÉÕÑ¥½¸ ¤ì4(€€€ô°€ÈÀ¤ì4(€ô4(4(€Ñ½±•A…ÕÍ” ¤ì(€€€Ñ¡¥Ì¹Í•ÑA…ÕÍ• …Ñ¡¥Ì¹Á…ÕÍ•¤ì(€ô((€Í•ÑA…ÕÍ•¡Á…ÕÍ•¤ì(€€€¥˜€¡Ñ¡¥Ì¹¥Í…µ•=Ù•É¹¥µ…Ñ¥¹œ¤É•ÑÕÉ¸ì(€€€Ñ¡¥Ì¹Á…ÕÍ•€ô	½½±•…¸¡Á…ÕÍ•¤ì(€€€½¹ÍĞ‰Ñ¸€ôÑ¡¥Ì¹•±Ì¹Á±…å	Ñ¸ì(4(€€€¥˜€¡Ñ¡¥Ì¹Á…ÕÍ•¤ì4(€€€€€Ñ¡¥Ì¹•±Ì¹…µ•5•ÍÍ…”ü¹ÍÑå±”¹Í•ÑAÉ½Á•ÉÑä ‘¥ÍÁ±…äœ°€‰±½¬œ¤ì4(€€€€€Ñ¡¥Ì¹Á…ÕÍ•Q¥µ•È ¤ì4(€€€€€¥˜€¡‰Ñ¸¤‰Ñ¸¹Ñ•áÑ½¹Ñ•¹Ğ€ô€ŸŠZØA±…äœì€¼¼…µ‰¥¼Ù¥ÍÕ…°„A±…ä4(€€€ô•±Í”¥˜€ …Ñ¡¥Ì¹…µ•=Ù•È¤ì(€€€€€Ñ¡¥Ì¹•±Ì¹…µ•5•ÍÍ…”ü¹ÍÑå±”¹Í•ÑAÉ½Á•ÉÑä ‘¥ÍÁ±…äœ°€¹½¹”œ¤ì(€€€€€Ñ¡¥Ì¹É•ÍÕµ•Q¥µ•È ¤ì(€€€€€¥˜€¡‰Ñ¸¤‰Ñ¸¹Ñ•áÑ½¹Ñ•¹Ğ€ô€ŸŠ>àA…ÕÍ”œì€¼¼…µ‰¥¼Ù¥ÍÕ…°„A…ÕÍ”(€€€ô4(€ô4(4(€Í¡½İ…µ•=Ù•ÉMÉ••¸ ¤ì4(€€€Ñ¡¥Ì¹•±Ì¹…µ•5•ÍÍ…”ü¹ÍÑå±”¹Í•ÑAÉ½Á•ÉÑä ‘¥ÍÁ±…äœ°€‰±½¬œ¤ì4(€€€½¹ÍĞ•°€ôÑ¡¥Ì¹•±Ì¹…µ•=Ù•Èì4(€€€¥˜€ …•°¤É•ÑÕÉ¸ì4(4(€€€•°¹¥¹¹•É!Q50€ô€4(€€€€€€€€ñ Èù5=YHğ½ Èø4(€€€€€€€€ñÀùM=I%90ğ½Àø4(€€€€€€€€ñ‘¥Ø±…ÍÌô‰™¥¹…°µÍ½É”ˆø‘íÑ¡¥Ì¹Í½É•ôğ½‘¥Øø4(€€€€€€€€ñÀù1¥¹•Ìè€‘íÑ¡¥Ì¹±¥¹•Íôğ½Àø4(€€€€€€€€ñ‰ÕÑÑ½¸±…ÍÌô‰‰Ñ¸µÁÉ¥µ…ÉäÉ•ÑÉå	Ñ¸ˆùQId%8ğ½‰ÕÑÑ½¸ø4(€€€€ì4(€€€€4(€€€€¼¼Ñ¥Ù…È‰½ÓÍ¸‘”É•¥¹Ñ•¹Ñ¼4(€€€½¹ÍĞÉ•ÑÉå	Ñ¸€ô•°¹ÅÕ•ÉåM•±•Ñ½È œ¹É•ÑÉå	Ñ¸œ¤ì4(€€€É•ÑÉå	Ñ¸¹½¹±¥¬€ô€ ¤€ôøÑ¡¥Ì¹É•Í•Ğ ¤ì4(4(€€€•°¹ÍÑå±”¹‘¥ÍÁ±…ä€ô€™±•àœì4(€ô4(4(€É•Í•Ğ ¤ì4(€€€½¹ÍĞ½MÉ••¸€ôÑ¡¥Ì¹•±Ì¹…µ•=Ù•Èì4(€€€¥˜€¡½MÉ••¸¤½MÉ••¸¹ÍÑå±”¹‘¥ÍÁ±…ä€ô€¹½¹”œì4(€€€Ñ¡¥Ì¹•±Ì¹…µ•5•ÍÍ…”ü¹ÍÑå±”¹Í•ÑAÉ½Á•ÉÑä ‘¥ÍÁ±…äœ°€‰±½¬œ¤ì4(€€€Ñ¡¥Ì¹…µ•=Ù•È€ô™…±Í”ì4(€€€Ñ¡¥Ì¹¥Í…µ•=Ù•É¹¥µ…Ñ¥¹œ€ô™…±Í”ì4(€€€Ñ¡¥Ì¹‰½…É€ôÉÉ…ä¹™É½´¡í±•¹Ñ èI=]Mô°€ ¤€ôøÉÉ…ä¡=1L¤¹™¥±° ´Ä¤¤ì4(€€€Ñ¡¥Ì¹‰…œ€ômtì4(€€€Ñ¡¥Ì¹¥¹¥Ñ	…œ ¤ì4(€€€Ñ¡¥Ì¹¹•áĞ€ôÑ¡¥Ì¹•Ñ9•áÑA¥••QåÁ” ¤ì4(€€€Ñ¡¥Ì¹ÍÁ…İ¹9•İA¥•” ¤ì4(€€€Ñ¡¥Ì¹Á…ÕÍ•€ôÑÉÕ”ì4(€€€Ñ¡¥Ì¹¥Í¹¥µ…Ñ¥¹œ€ô™…±Í”ì4(€€€Ñ¡¥Ì¹É½İÍQ½±•…È€ô¹Õ±°ì4(€€€½¹ÍĞ‰Ñ¸€ôÑ¡¥Ì¹•±Ì¹Á±…å	Ñ¸ì4(€€€¥˜€¡‰Ñ¸¤‰Ñ¸¹Ñ•áÑ½¹Ñ•¹Ğ€ô€ŸŠZØA±…äœì4(€€€Ñ¡¥Ì¹Í½É”€ô€Àì4(€€€Ñ¡¥Ì¹±¥¹•Ì€ô€Àì4(€€€Ñ¡¥Ì¹±…ÍÑQ¥µ”€ô€Àì4(€€€Ñ¡¥Ì¹…É•Q¥µ•È€ô€Àì4(€€€Ñ¡¥Ì¹‘…ÍQ¥µ•È€ô€Àì4(€€€Ñ¡¥Ì¹™…±±ÕµÕ±…Ñ½È€ô€Àì4(€€€Ñ¡¥Ì¹‰½ÑA±…¸€ô¹Õ±°ì4(€€€Ñ¡¥Ì¹­•åÌ€ôì±•™Ğè™…±Í”°É¥¡Ğè™…±Í”°‘½İ¸è™…±Í”ôì4(€€€Ñ¡¥Ì¹•±…ÁÍ•‘5Ì€ô€Àì4(€€€Ñ¡¥Ì¹¥Í	½ÑQ¡¥¹­¥¹œ€ô™…±Í”ì4(€€€Ñ¡¥Ì¹Á•¹‘¥¹	½ÑI•ÅÕ•ÍÑ%€ô¹Õ±°ì4(€€€Ñ¡¥Ì¹¡½ÍĞ€ô¹Õ±°ì4(€€€Ñ¡¥Ì¹‰½ÑÑ¥½¹Q¥µ•È€ô€Àì4(€€€Ñ¡¥Ì¹‰½Ñ5½‘”€ô¹Õ±°ì4(€€€Ñ¡¥Ì¹ÍÑ½ÁQ¥µ•È ¤ì4(€€€Ñ¡¥Ì¹ÕÁ‘…Ñ•Q¥µ•É¥ÍÁ±…ä ¤ì4(€€€¥˜€¡Ñ¡¥Ì¹•±Ì¹Í½É”¤Ñ¡¥Ì¹•±Ì¹Í½É”¹Ñ•áÑ½¹Ñ•¹Ğ€ôÑ¡¥Ì¹Í½É”ì4(€€€¥˜€¡Ñ¡¥Ì¹•±Ì¹±¥¹•Ì¤Ñ¡¥Ì¹•±Ì¹±¥¹•Ì¹Ñ•áÑ½¹Ñ•¹Ğ€ôÑ¡¥Ì¹±¥¹•Ìì4(€€€Ñ¡¥Ì¹É•¹‘•È ¤ì4(€€€Ñ¡¥Ì¹É•¹‘•É9•áĞ ¤ì4(€€€Ñ¡¥Ì¹ÕÁ‘…Ñ•%¹‘¥…Ñ½È ¤ì4(€ô4(4(€±½½À¡Ñ¥µ”€ô€À¤ì4(€€€½¹ÍĞ‘•±Ñ…Q¥µ”€ôÑ¡¥Ì¹±…ÍÑQ¥µ”€üÑ¥µ”€´Ñ¡¥Ì¹±…ÍÑQ¥µ”€è€Àì4(€€€Ñ¡¥Ì¹±…ÍÑQ¥µ”€ôÑ¥µ”ì4(4(€€€¥˜€ …Ñ¡¥Ì¹Á…ÕÍ•€˜˜€…Ñ¡¥Ì¹…µ•=Ù•È€˜˜€…Ñ¡¥Ì¹¥Í…µ•=Ù•É¹¥µ…Ñ¥¹œ¤ì4(€€€€€¥˜€¡Ñ¡¥Ì¹…É•Q¥µ•È€ø€À¤ì4(€€€€€€€Ñ¡¥Ì¹…É•Q¥µ•È€ô5…Ñ ¹µ…à À°Ñ¡¥Ì¹…É•Q¥µ•È€´‘•±Ñ…Q¥µ”¤ì4(€€€€€ô•±Í”ì4(€€€€€€€¥˜€ …Ñ¡¥Ì¹ÕÉÉ•¹Ğ€˜˜€…Ñ¡¥Ì¹¥Í¹¥µ…Ñ¥¹œ€˜˜€…Ñ¡¥Ì¹¥Í…µ•=Ù•É¹¥µ…Ñ¥¹œ¤ì4(€€€€€€€€€Ñ¡¥Ì¹ÍÁ…İ¹9•İA¥•” ¤ì4(€€€€€€€ô4(4(€€€€€€€¥˜€¡Ñ¡¥Ì¹ÕÉÉ•¹Ğ€˜˜€…Ñ¡¥Ì¹¥Í¹¥µ…Ñ¥¹œ€˜˜€…Ñ¡¥Ì¹¥Í…µ•=Ù•É¹¥µ…Ñ¥¹œ¤ì4(€€€€€€€€€¥˜€¡Ñ¡¥Ì¹¥…ÍÍ¥ÍĞ¤ì4(€€€€€€€€€€€Ñ¡¥Ì¹…ÁÁ±å	½Ñ½¹ÑÉ½°¡‘•±Ñ…Q¥µ”¤ì4(€€€€€€€€€ô4(€€€€€€€€€Ñ¡¥Ì¹¡…¹‘±•!½É¥é½¹Ñ…±%¹ÁÕĞ¡‘•±Ñ…Q¥µ”¤ì4(€€€€€€€€€Ñ¡¥Ì¹¡…¹‘±•É…Ù¥Ñä¡‘•±Ñ…Q¥µ”¤ì4(€€€€€€€ô4(€€€€€ô4(€€€ô4(€€€É•ÅÕ•ÍÑ¹¥µ…Ñ¥½¹É…µ” ¡Ğ¤€ôøÑ¡¥Ì¹±½½À¡Ğ¤¤ì4(€ô4(4(€ÍÑ…ÉÑQ¥µ•È ¤ì4(€€€¥˜€¡Ñ¡¥Ì¹Ñ¥µ•É%¹Ñ•ÉÙ…°¤É•ÑÕÉ¸ì4(€€€Ñ¡¥Ì¹Ñ¥µ•É¹¡½È€ôÁ•É™½Éµ…¹”¹¹½Ü ¤ì4(€€€Ñ¡¥Ì¹Ñ¥µ•É%¹Ñ•ÉÙ…°€ôÍ•Ñ%¹Ñ•ÉÙ…°  ¤€ôøÑ¡¥Ì¹Ñ¥­Q¥µ•È ¤°€ÈÔÀ¤ì4(€ô4(4(€É•ÍÕµ•Q¥µ•È ¤ì4(€€€¥˜€ …Ñ¡¥Ì¹Ñ¥µ•É%¹Ñ•ÉÙ…°¤Ñ¡¥Ì¹ÍÑ…ÉÑQ¥µ•È ¤ì4(€€€Ñ¡¥Ì¹Ñ¥µ•É¹¡½È€ôÁ•É™½Éµ…¹”¹¹½Ü ¤ì4(€ô4(4(€Á…ÕÍ•Q¥µ•È ¤ì4(€€€¥˜€¡Ñ¡¥Ì¹Ñ¥µ•É¹¡½È€„ôô¹Õ±°¤ì4(€€€€€Ñ¡¥Ì¹•±…ÁÍ•‘5Ì€¬ôÁ•É™½Éµ…¹”¹¹½Ü ¤€´Ñ¡¥Ì¹Ñ¥µ•É¹¡½Èì4(€€€€€Ñ¡¥Ì¹Ñ¥µ•É¹¡½È€ô¹Õ±°ì4(€€€€€Ñ¡¥Ì¹ÕÁ‘…Ñ•Q¥µ•É¥ÍÁ±…ä ¤ì4(€€€ô4(€ô4(4(€ÍÑ½ÁQ¥µ•È ¤ì4(€€€Ñ¡¥Ì¹Á…ÕÍ•Q¥µ•È ¤ì4(€€€¥˜€¡Ñ¡¥Ì¹Ñ¥µ•É%¹Ñ•ÉÙ…°¤ì4(€€€€€±•…É%¹Ñ•ÉÙ…°¡Ñ¡¥Ì¹Ñ¥µ•É%¹Ñ•ÉÙ…°¤ì4(€€€€€Ñ¡¥Ì¹Ñ¥µ•É%¹Ñ•ÉÙ…°€ô¹Õ±°ì4(€€€ô4(€ô4(4(€Ñ¥­Q¥µ•È ¤ì4(€€€¥˜€¡Ñ¡¥Ì¹Á…ÕÍ•ñğÑ¡¥Ì¹…µ•=Ù•ÈñğÑ¡¥Ì¹Ñ¥µ•É¹¡½È€ôôô¹Õ±°¤É•ÑÕÉ¸ì4(€€€½¹ÍĞ¹½Ü€ôÁ•É™½Éµ…¹”¹¹½Ü ¤ì4(€€€Ñ¡¥Ì¹•±…ÁÍ•‘5Ì€¬ô¹½Ü€´Ñ¡¥Ì¹Ñ¥µ•É¹¡½Èì4(€€€Ñ¡¥Ì¹Ñ¥µ•É¹¡½È€ô¹½Üì4(€€€Ñ¡¥Ì¹ÕÁ‘…Ñ•Q¥µ•É¥ÍÁ±…ä ¤ì4(€ô4(4(€ÕÁ‘…Ñ•Q¥µ•É¥ÍÁ±…ä ¤ì4(€€€¥˜€ …Ñ¡¥Ì¹Ñ¥µ•É¥ÍÁ±…ä¤É•ÑÕÉ¸ì4(€€€½¹ÍĞÑ½Ñ…±M•½¹‘Ì€ô5…Ñ ¹™±½½È¡Ñ¡¥Ì¹•±…ÁÍ•‘5Ì€¼€ÄÀÀÀ¤ì4(€€€½¹ÍĞµ¥¹ÕÑ•Ì€ô5…Ñ ¹™±½½È¡Ñ½Ñ…±M•½¹‘Ì€¼€ØÀ¤ì4(€€€½¹ÍĞÍ•½¹‘Ì€ôÑ½Ñ…±M•½¹‘Ì€”€ØÀì4(€€€Ñ¡¥Ì¹Ñ¥µ•É¥ÍÁ±…ä¹Ñ•áÑ½¹Ñ•¹Ğ€ô€‘íµ¥¹ÕÑ•Íôè‘íÍ•½¹‘Ì¹Ñ½MÑÉ¥¹œ ¤¹Á…‘MÑ…ÉĞ È°€œÀœ¥õ€ì4(€ô4(4(€€4)ô()±…ÍÌY•ÉÍÕÍ½¹ÑÉ½±±•Èì(€½¹ÍÑÉÕÑ½È¡¡Õµ…¸°ÁÔ¤ì(€€€¥˜€ „¡¡Õµ…¸¥¹ÍÑ…¹•½˜Q•ÑÉ¥Í…µ”¤ñğ€„¡ÁÔ¥¹ÍÑ…¹•½˜Q•ÑÉ¥Í…µ”¤¤ì(€€€€€Ñ¡É½Ü¹•ÜÉÉ½È m9QumÙ•ÉÍÕÍtM”É•ÅÕ¥•É•¸¥¹ÍÑ…¹¥…Ì¡Õµ…¹„äATÙ…±¥‘…Ì¸œ¤ì(€€€ô(€€€Ñ¡¥Ì¹¡Õµ…¸€ô¡Õµ…¸ì(€€€Ñ¡¥Ì¹ÁÔ€ôÁÔì(€€€Ñ¡¥Ì¹•¹…‰±•AT ¤ì((€€€¥˜€¡Ñ¡¥Ì¹¡Õµ…¸¹•±Ì¹Á±…å	Ñ¸¤ì(€€€€€Ñ¡¥Ì¹¡Õµ…¸¹•±Ì¹Á±…å	Ñ¸¹½¹±¥¬€ô€ ¤€ôøÑ¡¥Ì¹Ñ½±•A…ÕÍ” ¤ì(€€€ô(€€€¥˜€¡Ñ¡¥Ì¹¡Õµ…¸¹•±Ì¹¹•İ…µ•	Ñ¸¤ì(€€€€€Ñ¡¥Ì¹¡Õµ…¸¹•±Ì¹¹•İ…µ•	Ñ¸¹½¹±¥¬€ô€ ¤€ôøÑ¡¥Ì¹É•Í•Ğ ¤ì(€€€ô(€ô((€•¹…‰±•AT ¤ì(€€€Ñ¡¥Ì¹ÁÔ¹¥…ÍÍ¥ÍĞ€ôÑÉÕ”ì(€€€Ñ¡¥Ì¹ÁÔ¹•±Ì¹…µ•5•ÍÍ…”ü¹ÍÑå±”¹Í•ÑAÉ½Á•ÉÑä ‘¥ÍÁ±…äœ°Ñ¡¥Ì¹ÁÔ¹Á…ÕÍ•€ü€‰±½¬œ€è€¹½¹”œ¤ì(€€€¥˜€¡Ñ¡¥Ì¹ÁÔ¹•±Ì¹ÍÑ…ÑÕÌ¤Ñ¡¥Ì¹ÁÔ¹•±Ì¹ÍÑ…ÑÕÌ¹Ñ•áÑ½¹Ñ•¹Ğ€ô€5=<èATœì(€€€Ñ¡¥Ì¹ÁÔ¹ÕÁ‘…Ñ•%¹‘¥…Ñ½È ¤ì(€€€¥˜€¡Ñ¡¥Ì¹ÁÔ¹ÕÉÉ•¹Ğ€˜˜€…Ñ¡¥Ì¹ÁÔ¹…µ•=Ù•È€˜˜€…Ñ¡¥Ì¹ÁÔ¹¥Í¹¥µ…Ñ¥¹œ¤ì(€€€€€Ñ¡¥Ì¹ÁÔ¹É•ÅÕ•ÍÑ	½Ñ5½Ù” ¤ì(€€€ô(€ô((€Ñ½±•A…ÕÍ” ¤ì(€€€½¹ÍĞÍ¡½Õ±‘A…ÕÍ”€ô€…Ñ¡¥Ì¹¡Õµ…¸¹Á…ÕÍ•ñğ€…Ñ¡¥Ì¹ÁÔ¹Á…ÕÍ•ì(€€€Ñ¡¥Ì¹¡Õµ…¸¹Í•ÑA…ÕÍ•¡Í¡½Õ±‘A…ÕÍ”¤ì(€€€Ñ¡¥Ì¹ÁÔ¹Í•ÑA…ÕÍ•¡Í¡½Õ±‘A…ÕÍ”¤ì(€ô((€É•Í•Ğ ¤ì(€€€Ñ¡¥Ì¹¡Õµ…¸¹É•Í•Ğ ¤ì(€€€Ñ¡¥Ì¹ÁÔ¹É•Í•Ğ ¤ì(€€€Ñ¡¥Ì¹•¹…‰±•AT ¤ì(€ô)ô()İ¥¹‘½Ü¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±½…œ°€ ¤€ôøì(€½¹ÍĞ¡Õµ…¹I½½Ğ€ô‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ¹¡Õµ…¸µÍ¥‘”œ¤ì(€½¹ÍĞÁÕI½½Ğ€ô‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ¹ÁÔµÍ¥‘”œ¤ì(€½¹ÍĞ¡Õµ…¹U$€ô‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ¹¡Õµ…¸µÕ¤œ¤ì(€½¹ÍĞÁÕU$€ô‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ¹ÁÔµÕ¤œ¤ì(€½¹ÍĞÍ¡…É•‘½¹ÑÉ½±Ì€ô‘½Õµ•¹Ğ¹ÅÕ•ÉåM•±•Ñ½È œ¹Í¡…É•µ½¹ÑÉ½±Ìœ¤ì(€¥˜€ …¡Õµ…¹I½½Ğñğ€…ÁÕI½½Ğñğ€…¡Õµ…¹U$ñğ€…ÁÕU$ñğ€…Í¡…É•‘½¹ÑÉ½±Ì¤ì(€€€½¹Í½±”¹•ÉÉ½È m9Qum‰½½ÑÍÑÉ…Át…ÍĞµ…¥°è±…å½ÕĞÙ•ÉÍÕÌ¥¹½µÁ±•Ñ¼¸œ¤ì(€€€É•ÑÕÉ¸ì(€ô((€½¹ÍĞ¡Õµ…¸€ô¹•ÜQ•ÑÉ¥Í…µ”¡¡Õµ…¹I½½Ğ°ì(€€€Á±…å•É9…µ”è€@Äœ°(€€€Õ¥I½½Ğè¡Õµ…¹U$°(€€€½¹ÑÉ½±ÍI½½ĞèÍ¡…É•‘½¹ÑÉ½±Ì(€ô¤ì(€½¹ÍĞÁÔ€ô¹•ÜQ•ÑÉ¥Í…µ”¡ÁÕI½½Ğ°ì(€€€Á±…å•É9…µ”è€ATœ°(€€€¥ÍATèÑÉÕ”°(€€€Õ¥I½½ĞèÁÕU$(€ô¤ì(€½¹ÍĞÙ•ÉÍÕÌ€ô¹•ÜY•ÉÍÕÍ½¹ÑÉ½±±•È¡¡Õµ…¸°ÁÔ¤ì((€‘½Õµ•¹Ğ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ­•å‘½İ¸œ°€¡•Ù•¹Ğ¤€ôøì(€€€¥˜€¡•Ù•¹Ğ¹­•ä¹Ñ½UÁÁ•É…Í” ¤€ôôô€@œ¤ì(€€€€€•Ù•¹Ğ¹ÁÉ•Ù•¹Ñ•™…Õ±Ğ ¤ì(€€€€€Ù•ÉÍÕÌ¹Ñ½±•A…ÕÍ” ¤ì(€€€€€É•ÑÕÉ¸ì(€€€ô(€€€Ù•ÉÍÕÌ¹¡Õµ…¸¹¡…¹‘±•-•å½İ¸¡•Ù•¹Ğ¤ì(€ô¤ì(€‘½Õµ•¹Ğ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ­•åÕÀœ°€¡•Ù•¹Ğ¤€ôøÙ•ÉÍÕÌ¹¡Õµ…¸¹¡…¹‘±•-•åUÀ¡•Ù•¹Ğ¤¤ì((€½¹ÍĞÍå¹Y•ÉÍÕÍ	½…É‘Ì€ô€ ¤€ôøì(€€€Íå¹	½…É‘M…±”¡Ù•ÉÍÕÌ¹ÁÔ°€À¸Ü¤ì(€€€Íå¹	½…É‘M…±”¡Ù•ÉÍÕÌ¹¡Õµ…¸¤ì(€ôì(€É•ÅÕ•ÍÑ¹¥µ…Ñ¥½¹É…µ”¡Íå¹Y•ÉÍÕÍ	½…É‘Ì¤ì((€İ¥¹‘½Ü¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È É•Í¥é”œ°€ ¤€ôøì(€€€±•…ÉQ¥µ•½ÕĞ¡İ¥¹‘½Ü¹É•Í¥é•Q¥µ•È¤ì(€€€İ¥¹‘½Ü¹É•Í¥é•Q¥µ•È€ôÍ•ÑQ¥µ•½ÕĞ¡Íå¹Y•ÉÍÕÍ	½…É‘Ì°€ÔÀ¤ì(€ô¤ì((€İ¥¹‘½Ü¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ½É¥•¹Ñ…Ñ¥½¹¡…¹”œ°Íå¹Y•ÉÍÕÍ	½…É‘Ì¤ì(€‘½Õµ•¹Ğ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ™Õ±±ÍÉ••¹¡…¹”œ°Íå¹Y•ÉÍÕÍ	½…É‘Ì¤ì)ô¤ì

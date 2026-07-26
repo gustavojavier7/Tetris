@@ -64,34 +64,6 @@ body {
     gap: 10px;
 }
 
-.versus-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    width: 100%;
-    height: 100%;
-    min-height: 0;
-}
-
-.game-instance {
-    --unit: 20px;
-    --area-x: 12;
-    --area-y: 22;
-    position: relative;
-    min-width: 0;
-    min-height: 0;
-}
-
-.game-instance .main-grid {
-    grid-template-columns: minmax(150px, 0.8fr) minmax(240px, 1fr);
-    height: 100%;
-}
-
-.cpu-instance .controls,
-.cpu-instance .mode-switches {
-    display: none;
-}
-
 /* --- ESTÉTICA RETRO / ARCADE (Reemplaza Win95) --- */
 
 .header {
@@ -124,7 +96,7 @@ body {
 .main-grid {
     flex: 1;
     display: grid;
-    grid-template-columns: 300px 1fr;
+    grid-template-columns: 1fr 300px 1fr;
     gap: 20px;
     min-height: 0;
     height: 100%;
@@ -583,7 +555,7 @@ body { background: var(--desktop); }
         inset -1px -1px 0 0 var(--win-hl);
 }
 
-.main-grid { grid-template-columns: 300px 1fr; gap: 8px; }
+.main-grid { grid-template-columns: 1fr 300px 1fr; gap: 8px; }
 .control-panel {
     display: flex;
     flex-direction: column;
@@ -764,7 +736,7 @@ button:active {
 }
 
 .main-grid {
-    grid-template-columns: var(--panel-window-width) var(--panel-window-width);
+    grid-template-columns: 1fr 300px 1fr;
     gap: 12px;
     height: calc(100vh - 16px);
     align-items: stretch;
@@ -777,7 +749,7 @@ button:active {
     display: flex;
     align-items: stretch;
     justify-content: stretch;
-    width: var(--panel-window-width);
+    width: 100%;
     min-width: 0;
     height: 100%;
     min-height: 0;
@@ -805,4 +777,63 @@ button:active {
         inset 6px 6px 0 0 var(--win-shadow),
         inset -6px -6px 0 0 var(--win-hl);
     border: none;
+}
+
+.shared-panel {
+    --unit: 12px;
+    width: 100%;
+    min-width: 0;
+    height: calc(100vh - 16px);
+    padding: 4px;
+    gap: 6px;
+    justify-content: flex-start;
+    overflow-y: auto;
+}
+
+.instance-ui {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.instance-ui .win98-client {
+    padding: 5px;
+}
+
+.instance-ui .stats-grid {
+    gap: 4px;
+}
+
+.instance-ui .stat-card .value,
+.instance-ui .timer-box .value {
+    min-height: 22px;
+    padding: 5px 3px;
+    margin-top: 3px;
+}
+
+.compact-info .win98-client {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 5px;
+    align-items: center;
+}
+
+.compact-info .bot-strategy-indicator {
+    grid-column: 1 / -1;
+}
+
+.compact-info .next-piece-box {
+    width: 72px;
+    height: 60px;
+}
+
+.compact-info .log-content {
+    height: 60px;
+    min-width: 0;
+}
+
+@media (max-width: 1100px) {
+    .main-grid {
+        grid-template-columns: 1fr 260px 1fr;
+    }
 }
