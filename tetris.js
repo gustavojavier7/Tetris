@@ -2,9 +2,10 @@
 
 const COLS = 12;
 const ROWS = 22;
+const GARBAGE_ID = 7;
 
 const PIECE_TYPES = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
-const BLOCK_CLASSES = ['block0', 'block1', 'block2', 'block3', 'block4', 'block5', 'block6'];
+const BLOCK_CLASSES = ['block0', 'block1', 'block2', 'block3', 'block4', 'block5', 'block6', 'block-garbage'];
 
 function syncBoardScale(gameInstance, scaleFactor = 1) {
   if (!(gameInstance instanceof TetrisGame)) {
@@ -292,6 +293,7 @@ class TetrisGame {
     this.elapsedMs = 0;
     this.timerInterval = null;
     this.timerAnchor = null;
+    this.started = false;
 
     this.initBag();
     this.next = this.getNextPieceType();
@@ -302,8 +304,6 @@ class TetrisGame {
     this.updateIndicator();
     this.updateTimerDisplay();
 
-    this.bindEvents();
-    this.loop();
   }
 
   $(sel) {
@@ -311,6 +311,12 @@ class TetrisGame {
       || this.uiRoot?.querySelector(sel)
       || this.controlsRoot?.querySelector(sel)
       || null;
+  }
+
+  start() {
+    if (this.started) return;
+    this.started = true;
+    this.loop();
   }
 
   initActiveBlocks() {
@@ -394,45 +400,28 @@ class TetrisGame {
     return false;
   }
 
-  bindEvents() {
-    if (this.isCPU) return;
-    if (!this.els.playBtn || !this.els.newGameBtn || !this.els.iaAssistToggle) {
-      console.error(`[AGENT][${this.playerName}] Fast-Fail: controles incompletos.`);
-      return;
+  setIAAssist(enabled) {
+    this.iaAssist = Boolean(enabled);
+    this.els.iaAssistToggle?.classList.toggle('active', this.iaAssist);
+    this.pendingBotRequestId = null;
+    this.isBotThinking = false;
+    this.ghost = null;
+    this.botPlan = null;
+    this.botActionQueue = [];
+    this.botMode = null;
+    this.fallAccumulator = 0;
+    this.dasTimer = 0;
+    this.keys = { left: false, right: false, down: false };
+
+    if (this.els.status) {
+      this.els.status.textContent = this.iaAssist
+        ? (this.isCPU ? 'MODO: CPU' : 'MODO: INICIANDO...')
+        : 'MODO: MANUAL';
     }
-    this.els.playBtn.onclick = () => this.togglePause();
-    this.els.newGameBtn.onclick = () => this.reset();
-    this.els.iaAssistToggle.onclick = () => {
-      this.iaAssist = !this.iaAssist;
-      this.els.iaAssistToggle.classList.toggle('active', this.iaAssist);
-      
-      // --- CORRECCIÓN DE LIMPIEZA ---
-      this.pendingBotRequestId = null;
-      this.isBotThinking = false;
-      this.ghost = null;
-      this.botPlan = null;
-      this.botActionQueue = []; // Limpiar cola para evitar bloqueos
-      this.botMode = null;
-      // -----------------------------
-
-      if (this.iaAssist) {
-        // Solo pedimos movimiento si el juego NO está en Game Over y tenemos pieza
-        if (!this.gameOver && this.current && !this.isAnimating && !this.isGameOverAnimating) {
-          this.requestBotMove();
-        }
-      }
-      
-      // ... resto del código (fallAccumulator, timer reset, visuales) ...
-      this.fallAccumulator = 0;
-      this.dasTimer = 0;
-      this.keys = { left: false, right: false, down: false };
-      const statusEl = this.els.status;
-      if (statusEl) {
-        statusEl.textContent = this.iaAssist ? 'MODO: INICIANDO...' : 'MODO: MANUAL';
-      }
-      this.updateIndicator();
-    };
-
+    if (this.iaAssist && !this.gameOver && this.current && !this.isAnimating && !this.isGameOverAnimating) {
+      this.requestBotMove();
+    }
+    this.updateIndicator();
   }
 
   handleKeyDown(event) {
@@ -1160,6 +1149,35 @@ class TetrisGame {
     }
   }
 
+  applyGarbage(lines) {
+    if (!Number.isInteger(lines) || lines <= 0 || !Array.isArray(this.board)) return;
+    if (this.board.length !== ROWS || this.board.some(row => !Array.isArray(row) || row.length !== COLS)) {
+      console.error('[AGENT][garbage] Fast-Fail: tablero invalido.');
+      return;
+    }
+
+    const hole = Math.floor(Math.random() * COLS);
+    let overflow = false;
+
+    for (let index = 0; index < lines; index++) {
+      const top = this.board.shift();
+      if (top.some(cell => cell !== -1)) overflow = true;
+      const row = Array(COLS).fill(GARBAGE_ID);
+      row[hole] = -1;
+      this.board.push(row);
+    }
+
+    if (overflow) {
+      this.triggerGameOver();
+      return;
+    }
+
+    this.botPlan = null;
+    this.botActionQueue = [];
+    this.ghost = null;
+    this.render();
+  }
+
   lockPiece() {
     if (this.isAnimating || this.isGameOverAnimating) return;
     if (!this.current || !this.current.matrix) {
@@ -1219,6 +1237,11 @@ class TetrisGame {
         const linesCleared = rowsToClear.length;
         this.score += linesCleared * 100;
         this.lines += linesCleared;
+        const rawAttack = ATTACK_TABLE[Math.min(linesCleared, 4)];
+        const cancelled = Math.min(rawAttack, this.garbageQueue);
+        this.garbageQueue -= cancelled;
+        const outgoing = rawAttack - cancelled;
+        if (outgoing > 0) this.onAttack?.(outgoing);
 
         while (this.board.length < ROWS) {
           this.board.unshift(Array(COLS).fill(-1));
@@ -1227,6 +1250,11 @@ class TetrisGame {
         this.finishTurn(linesCleared);
       }, 400);
     } else {
+      if (this.garbageQueue > 0) {
+        this.applyGarbage(this.garbageQueue);
+        this.garbageQueue = 0;
+        if (this.gameOver) return;
+      }
       this.finishTurn(0);
     }
   }
@@ -1262,6 +1290,7 @@ class TetrisGame {
     if (btn) btn.textContent = '▶ Play';
 
     this.runGameOverDestruction();
+    this.onDefeat?.();
   }
 
   runGameOverDestruction() {
@@ -1370,6 +1399,7 @@ class TetrisGame {
     this.ghost = null;
     this.botActionTimer = 0;
     this.botMode = null;
+    this.garbageQueue = 0;
     this.stopTimer();
     this.updateTimerDisplay();
     if (this.els.score) this.els.score.textContent = this.score;
@@ -1448,91 +1478,3 @@ class TetrisGame {
 
   
 }
-
-class VersusController {
-  constructor(human, cpu) {
-    if (!(human instanceof TetrisGame) || !(cpu instanceof TetrisGame)) {
-      throw new Error('[AGENT][versus] Se requieren instancias humana y CPU validas.');
-    }
-    this.human = human;
-    this.cpu = cpu;
-    this.enableCPU();
-
-    if (this.human.els.playBtn) {
-      this.human.els.playBtn.onclick = () => this.togglePause();
-    }
-    if (this.human.els.newGameBtn) {
-      this.human.els.newGameBtn.onclick = () => this.reset();
-    }
-  }
-
-  enableCPU() {
-    this.cpu.iaAssist = true;
-    this.cpu.els.gameMessage?.style.setProperty('display', this.cpu.paused ? 'block' : 'none');
-    if (this.cpu.els.status) this.cpu.els.status.textContent = 'MODO: CPU';
-    this.cpu.updateIndicator();
-    if (this.cpu.current && !this.cpu.gameOver && !this.cpu.isAnimating) {
-      this.cpu.requestBotMove();
-    }
-  }
-
-  togglePause() {
-    const shouldPause = !this.human.paused || !this.cpu.paused;
-    this.human.setPaused(shouldPause);
-    this.cpu.setPaused(shouldPause);
-  }
-
-  reset() {
-    this.human.reset();
-    this.cpu.reset();
-    this.enableCPU();
-  }
-}
-
-window.addEventListener('load', () => {
-  const humanRoot = document.querySelector('.human-side');
-  const cpuRoot = document.querySelector('.cpu-side');
-  const humanUI = document.querySelector('.human-ui');
-  const cpuUI = document.querySelector('.cpu-ui');
-  const sharedControls = document.querySelector('.shared-controls');
-  if (!humanRoot || !cpuRoot || !humanUI || !cpuUI || !sharedControls) {
-    console.error('[AGENT][bootstrap] Fast-Fail: layout versus incompleto.');
-    return;
-  }
-
-  const human = new TetrisGame(humanRoot, {
-    playerName: 'P1',
-    uiRoot: humanUI,
-    controlsRoot: sharedControls
-  });
-  const cpu = new TetrisGame(cpuRoot, {
-    playerName: 'CPU',
-    isCPU: true,
-    uiRoot: cpuUI
-  });
-  const versus = new VersusController(human, cpu);
-
-  document.addEventListener('keydown', (event) => {
-    if (event.key.toUpperCase() === 'P') {
-      event.preventDefault();
-      versus.togglePause();
-      return;
-    }
-    versus.human.handleKeyDown(event);
-  });
-  document.addEventListener('keyup', (event) => versus.human.handleKeyUp(event));
-
-  const syncVersusBoards = () => {
-    syncBoardScale(versus.cpu, 0.7);
-    syncBoardScale(versus.human);
-  };
-  requestAnimationFrame(syncVersusBoards);
-
-  window.addEventListener('resize', () => {
-    clearTimeout(window.resizeTimer);
-    window.resizeTimer = setTimeout(syncVersusBoards, 50);
-  });
-
-  window.addEventListener('orientationchange', syncVersusBoards);
-  document.addEventListener('fullscreenchange', syncVersusBoards);
-});

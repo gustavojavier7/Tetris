@@ -725,6 +725,39 @@ button:active {
 }
 .tetris-gameover .final-score { color: var(--accent); }
 
+.versus-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.72);
+}
+
+.versus-overlay[hidden] {
+    display: none;
+}
+
+.versus-result {
+    min-width: min(360px, 90vw);
+    padding: 18px;
+    border: 3px outset var(--win-light);
+    background: var(--panel);
+    color: var(--text);
+    text-align: center;
+    box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.5);
+}
+
+.versus-result h2 {
+    margin: 0 0 12px;
+    color: var(--accent);
+}
+
+.versus-result button {
+    min-width: 150px;
+}
+
 /* === LAYOUT FULL-WIDTH === */
 .container {
     max-width: none !important;
