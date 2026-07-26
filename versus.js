@@ -106,7 +106,7 @@ class VersusController {
 
   bindScale() {
     const syncVersusBoards = () => {
-      syncBoardScale(this.cpu, 0.7);
+      syncBoardScale(this.cpu);
       syncBoardScale(this.human);
     };
     requestAnimationFrame(syncVersusBoards);
