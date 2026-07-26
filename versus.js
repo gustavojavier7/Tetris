@@ -1,5 +1,3 @@
-const ATTACK_TABLE = [0, 0, 1, 2, 4];
-
 class VersusController {
   constructor() {
     const humanRoot = document.querySelector('.human-side');
@@ -40,7 +38,7 @@ class VersusController {
 
   route(target, lines) {
     if (!(target instanceof TetrisGame) || !Number.isInteger(lines) || lines <= 0 || this.finished) return;
-    target.garbageQueue += lines;
+    target.enqueueGarbage(lines);
   }
 
   togglePause() {
@@ -53,6 +51,7 @@ class VersusController {
   reset() {
     this.finished = false;
     this.overlay.hidden = true;
+    this.human.setIAAssist(false);
     this.human.reset();
     this.cpu.reset();
     this.cpu.setIAAssist(true);
