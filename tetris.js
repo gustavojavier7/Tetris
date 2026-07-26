@@ -3,6 +3,7 @@
 const COLS = 12;
 const ROWS = 22;
 const GARBAGE_ID = 7;
+const ATTACK_TABLE = [0, 1, 2, 4, 6];
 
 const PIECE_TYPES = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
 const BLOCK_CLASSES = ['block0', 'block1', 'block2', 'block3', 'block4', 'block5', 'block6', 'block-garbage'];
@@ -44,7 +45,7 @@ function syncBoardScale(gameInstance, scaleFactor = 1) {
   if (availableWidth <= 0 || availableHeight <= 0) return;
 
   // Calcular unit para llenar al máximo manteniendo proporción.
-  const unitByWidth = Math.floor(availableWidth / COLS);
+  const unitByWidth = Math.floor((availableWidth - 6) / (COLS + 1));
   const unitByHeight = Math.floor(availableHeight / ROWS);
 
   let dynamicUnit = Math.floor(Math.min(unitByWidth, unitByHeight) * scaleFactor);
@@ -236,7 +237,8 @@ class TetrisGame {
       newGameBtn: this.$('.newGameBtn'),
       iaAssistToggle: this.$('.iaAssistToggle'),
       gameMessage: this.$('.gameMessage'),
-      gameOver: this.$('.tetris-gameover')
+      gameOver: this.$('.tetris-gameover'),
+      garbageMeter: this.$('.garbage-meter')
     };
     if (!this.els.area || !this.els.nextBox) {
       throw new Error(`[AGENT][${this.playerName}] DOM de tablero incompleto.`);
@@ -303,6 +305,7 @@ class TetrisGame {
     this.renderNext();
     this.updateIndicator();
     this.updateTimerDisplay();
+    this.updateGarbageMeter();
 
   }
 
@@ -429,7 +432,7 @@ class TetrisGame {
       event.preventDefault();
     }
 
-    if (this.paused || this.gameOver || this.isAnimating || this.isGameOverAnimating) return;
+    if (this.paused || this.gameOver || this.iaAssist || this.isAnimating || this.isGameOverAnimating) return;
     const pieceReady = this.current && this.areTimer === 0;
 
     switch (event.key) {
@@ -593,6 +596,7 @@ class TetrisGame {
     const h = matrix.length;
     const COLS_BOX = 6;
     const ROWS_BOX = 5;
+    const boxUnit = this.nextBox.clientWidth / COLS_BOX;
     const offsetX = (COLS_BOX - w) / 2;
     const offsetY = (ROWS_BOX - h) / 2;
     matrix.forEach((row, dy) => {
@@ -600,8 +604,8 @@ class TetrisGame {
         if (val) {
           const div = document.createElement('div');
           div.className = BLOCK_CLASSES[this.next.typeId];
-          div.style.left = `${(dx + offsetX) * this.UNIT}px`;
-          div.style.top = `${(dy + offsetY) * this.UNIT}px`;
+          div.style.left = `${(dx + offsetX) * boxUnit}px`;
+          div.style.top = `${(dy + offsetY) * boxUnit}px`;
           this.nextBox.appendChild(div);
         }
       });
@@ -1178,6 +1182,24 @@ class TetrisGame {
     this.render();
   }
 
+  updateGarbageMeter() {
+    const meter = this.els.garbageMeter;
+    if (!meter) return;
+    meter.replaceChildren();
+    meter.setAttribute('aria-label', `${this.playerName}: ${this.garbageQueue} pending garbage lines`);
+    for (let index = 0; index < this.garbageQueue; index++) {
+      const line = document.createElement('div');
+      line.className = 'garbage-meter-line';
+      meter.appendChild(line);
+    }
+  }
+
+  enqueueGarbage(lines) {
+    if (!Number.isInteger(lines) || lines <= 0) return;
+    this.garbageQueue += lines;
+    this.updateGarbageMeter();
+  }
+
   lockPiece() {
     if (this.isAnimating || this.isGameOverAnimating) return;
     if (!this.current || !this.current.matrix) {
@@ -1240,6 +1262,7 @@ class TetrisGame {
         const rawAttack = ATTACK_TABLE[Math.min(linesCleared, 4)];
         const cancelled = Math.min(rawAttack, this.garbageQueue);
         this.garbageQueue -= cancelled;
+        this.updateGarbageMeter();
         const outgoing = rawAttack - cancelled;
         if (outgoing > 0) this.onAttack?.(outgoing);
 
@@ -1251,8 +1274,11 @@ class TetrisGame {
       }, 400);
     } else {
       if (this.garbageQueue > 0) {
-        this.applyGarbage(this.garbageQueue);
+        const pendingGarbage = this.garbageQueue;
         this.garbageQueue = 0;
+        this.updateGarbageMeter();
+        this.current = null;
+        this.applyGarbage(pendingGarbage);
         if (this.gameOver) return;
       }
       this.finishTurn(0);
@@ -1350,6 +1376,10 @@ class TetrisGame {
   }
 
   showGameOverScreen() {
+    if (this.onDefeat) {
+      this.els.gameOver?.style.setProperty('display', 'none');
+      return;
+    }
     this.els.gameMessage?.style.setProperty('display', 'block');
     const el = this.els.gameOver;
     if (!el) return;
@@ -1400,6 +1430,7 @@ class TetrisGame {
     this.botActionTimer = 0;
     this.botMode = null;
     this.garbageQueue = 0;
+    this.updateGarbageMeter();
     this.stopTimer();
     this.updateTimerDisplay();
     if (this.els.score) this.els.score.textContent = this.score;
